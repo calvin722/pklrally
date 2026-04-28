@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import Avatar from "./Avatar";
 
 interface PlayerLite {
@@ -10,50 +9,22 @@ interface PlayerLite {
   display_name: string;
   is_admin: boolean;
   avatar_url: string | null;
+  avatar_focal_x: number;
+  avatar_focal_y: number;
 }
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 /**
- * Read auth user id directly from the Supabase session cookie.
- * Used as a fallback when supabase.auth.getUser() hangs (rare but happens).
- * The @supabase/ssr browser client stores the full session as JSON in the
- * cookie value (optionally base64-prefixed and chunked across .0/.1/.2 cookies).
+ * AuthButton — uses ONLY direct REST calls + cookie reading.
+ *
+ * supabase-js's auth client has a known navigator.locks-based mutex that
+ * hangs in certain browser/extension states even with the lock-disable
+ * option. Rather than fight the library, we sidestep it: read the session
+ * directly from the auth cookie, and use plain `fetch` with the access
+ * token to hit /rest/v1/. Always responsive, no lock contention possible.
  */
-function readUserIdFromCookie(): string | null {
-  if (typeof document === "undefined") return null;
-
-  // Find all sb-*-auth-token (and chunks) cookies, sort by chunk index, join.
-  const cookies = document.cookie.split(";").map((c) => c.trim());
-  const authBase = cookies.find(
-    (c) => /^sb-[^=]+-auth-token=/.test(c) && !/-auth-token\.\d+=/.test(c),
-  );
-  const authChunks = cookies
-    .filter((c) => /^sb-[^=]+-auth-token\.\d+=/.test(c))
-    .sort((a, b) => {
-      const ai = parseInt(a.match(/-auth-token\.(\d+)=/)?.[1] ?? "0", 10);
-      const bi = parseInt(b.match(/-auth-token\.(\d+)=/)?.[1] ?? "0", 10);
-      return ai - bi;
-    });
-
-  let raw = "";
-  if (authBase) {
-    raw = authBase.split("=").slice(1).join("=");
-  } else if (authChunks.length) {
-    raw = authChunks.map((c) => c.split("=").slice(1).join("=")).join("");
-  }
-  if (!raw) return null;
-
-  try {
-    const decoded = decodeURIComponent(raw);
-    const json = decoded.startsWith("base64-")
-      ? atob(decoded.slice(7))
-      : decoded;
-    const session = JSON.parse(json);
-    return session?.user?.id ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export default function AuthButton() {
   const [player, setPlayer] = useState<PlayerLite | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,48 +32,36 @@ export default function AuthButton() {
   const [pendingVouches, setPendingVouches] = useState(0);
 
   useEffect(() => {
-    const supabase = createClient();
     let mounted = true;
 
     async function load() {
       try {
-        // Step 1: figure out the signed-in user's auth UUID.
-        // We try supabase.auth.getUser() first, but race it against a 2-second
-        // timeout AND a fallback that reads the user out of the auth cookie
-        // directly. supabase-js's auth path can hang on some browser
-        // contexts (navigator.locks bugs, crashed prior tabs holding a lock,
-        // etc.) — the cookie fallback gets us unstuck.
-        const userId = await Promise.race([
-          supabase.auth
-            .getUser()
-            .then((r) => r.data.user?.id ?? null)
-            .catch(() => null),
-          new Promise<string | null>((resolve) =>
-            setTimeout(() => resolve(readUserIdFromCookie()), 2000),
-          ),
-        ]);
+        const session = readSessionFromCookie();
         if (!mounted) return;
 
-        if (!userId) {
+        if (!session) {
           setPlayer(null);
           setLoading(false);
           return;
         }
 
-        const { data, error } = await supabase
-          .from("players")
-          .select("id, display_name, is_admin, avatar_url")
-          .eq("auth_user_id", userId)
-          .maybeSingle();
-
+        const playerRow = await fetchPlayer(
+          session.userId,
+          session.accessToken,
+        );
         if (!mounted) return;
-        if (error) console.error("AuthButton player query:", error);
-        setPlayer(data ?? null);
+        setPlayer(playerRow);
         setLoading(false);
 
-        if (data?.id) loadPendingVouches(data.id);
+        if (playerRow?.id) {
+          const count = await fetchPendingVouchesCount(
+            playerRow.id,
+            session.accessToken,
+          );
+          if (mounted) setPendingVouches(count);
+        }
       } catch (err) {
-        console.error("AuthButton load threw:", err);
+        console.error("AuthButton load failed:", err);
         if (mounted) {
           setPlayer(null);
           setLoading(false);
@@ -110,36 +69,15 @@ export default function AuthButton() {
       }
     }
 
-    async function loadPendingVouches(playerId: string) {
-      try {
-        const { count, error } = await supabase
-          .from("matches")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "pending")
-          .or(
-            [
-              `server_team_p1.eq.${playerId}`,
-              `server_team_p2.eq.${playerId}`,
-              `receiver_team_p1.eq.${playerId}`,
-              `receiver_team_p2.eq.${playerId}`,
-            ].join(","),
-          )
-          .neq("logged_by", playerId);
-        if (error) {
-          console.error("loadPendingVouches:", error);
-          return;
-        }
-        if (mounted) setPendingVouches(count ?? 0);
-      } catch (err) {
-        console.error("loadPendingVouches threw:", err);
-      }
-    }
-
     load();
-    const { data: subscription } = supabase.auth.onAuthStateChange(load);
+    // Re-check when the page regains focus (covers sign-out from another tab)
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       mounted = false;
-      subscription.subscription.unsubscribe();
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
@@ -164,7 +102,6 @@ export default function AuthButton() {
 
   return (
     <div className="relative z-50">
-      {/* Hamburger trigger — small avatar + 3-line icon, with badge */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -174,13 +111,7 @@ export default function AuthButton() {
         aria-label="Open menu"
       >
         <Avatar player={player} size="sm" />
-        <svg
-          width="18"
-          height="14"
-          viewBox="0 0 18 14"
-          fill="none"
-          aria-hidden
-        >
+        <svg width="18" height="14" viewBox="0 0 18 14" fill="none" aria-hidden>
           <rect width="18" height="2" rx="1" fill="#99FF00" />
           <rect y="6" width="18" height="2" rx="1" fill="#99FF00" />
           <rect y="12" width="18" height="2" rx="1" fill="#99FF00" />
@@ -201,7 +132,6 @@ export default function AuthButton() {
           className="absolute right-0 z-50 mt-2 w-60 overflow-hidden rounded-xl border-2 border-pickle bg-black neon-pickle"
           onMouseLeave={() => setOpen(false)}
         >
-          {/* Header — name, view profile shortcut */}
           <div className="flex items-center gap-3 border-b-2 border-pickle/40 bg-pickle/5 px-4 py-3">
             <Avatar player={player} size="md" />
             <div className="min-w-0">
@@ -218,12 +148,7 @@ export default function AuthButton() {
             </div>
           </div>
 
-          <MenuItem
-            href={`/profile/${player.id}`}
-            icon="👤"
-            label="My Profile"
-            onClick={() => setOpen(false)}
-          />
+          <MenuItem href={`/profile/${player.id}`} icon="👤" label="My Profile" onClick={() => setOpen(false)} />
           <MenuItem
             href="/vouch"
             icon="✓"
@@ -231,38 +156,12 @@ export default function AuthButton() {
             badge={pendingVouches > 0 ? pendingVouches : undefined}
             onClick={() => setOpen(false)}
           />
-          <MenuItem
-            href="/rally/new"
-            icon="▶"
-            label="Log a Rally"
-            onClick={() => setOpen(false)}
-          />
-          <MenuItem
-            href="/stats"
-            icon="📊"
-            label="My Stats"
-            comingSoon
-          />
-          <MenuItem
-            href="/ladder"
-            icon="🏆"
-            label="Monthly Ladder"
-            comingSoon
-          />
-          <MenuItem
-            href="/courts/suggest"
-            icon="📍"
-            label="Suggest a Court"
-            comingSoon
-          />
+          <MenuItem href="/rally/new" icon="▶" label="Log a Rally" onClick={() => setOpen(false)} />
+          <MenuItem href="/stats" icon="📊" label="My Stats" comingSoon />
+          <MenuItem href="/ladder" icon="🏆" label="Monthly Ladder" comingSoon />
+          <MenuItem href="/courts/suggest" icon="📍" label="Suggest a Court" comingSoon />
           {player.is_admin && (
-            <MenuItem
-              href="/admin"
-              icon="⚙"
-              label="Admin"
-              accent="bright"
-              onClick={() => setOpen(false)}
-            />
+            <MenuItem href="/admin" icon="⚙" label="Admin" accent="bright" onClick={() => setOpen(false)} />
           )}
 
           <form action="/auth/signout" method="post">
@@ -279,6 +178,104 @@ export default function AuthButton() {
     </div>
   );
 }
+
+// =============================================================
+// Direct cookie + REST helpers — no supabase-js dependency
+// =============================================================
+
+interface ParsedSession {
+  userId: string;
+  accessToken: string;
+}
+
+function readSessionFromCookie(): ParsedSession | null {
+  if (typeof document === "undefined") return null;
+  const cookies = document.cookie.split(";").map((c) => c.trim());
+
+  // Base auth-token cookie (no chunk suffix)
+  const authBase = cookies.find(
+    (c) => /^sb-[^=]+-auth-token=/.test(c) && !/-auth-token\.\d+=/.test(c),
+  );
+  // Chunked cookies: -auth-token.0, .1, .2, ...
+  const authChunks = cookies
+    .filter((c) => /^sb-[^=]+-auth-token\.\d+=/.test(c))
+    .sort((a, b) => {
+      const ai = parseInt(a.match(/-auth-token\.(\d+)=/)?.[1] ?? "0", 10);
+      const bi = parseInt(b.match(/-auth-token\.(\d+)=/)?.[1] ?? "0", 10);
+      return ai - bi;
+    });
+
+  let raw = "";
+  if (authBase) raw = authBase.split("=").slice(1).join("=");
+  else if (authChunks.length)
+    raw = authChunks.map((c) => c.split("=").slice(1).join("=")).join("");
+  if (!raw) return null;
+
+  try {
+    const decoded = decodeURIComponent(raw);
+    const json = decoded.startsWith("base64-") ? atob(decoded.slice(7)) : decoded;
+    const session = JSON.parse(json);
+    if (!session?.access_token || !session?.user?.id) return null;
+    return {
+      userId: session.user.id,
+      accessToken: session.access_token,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchPlayer(
+  userId: string,
+  accessToken: string,
+): Promise<PlayerLite | null> {
+  const url = `${SUPABASE_URL}/rest/v1/players?select=id,display_name,is_admin,avatar_url,avatar_focal_x,avatar_focal_y&auth_user_id=eq.${userId}&limit=1`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      apikey: ANON_KEY,
+      Accept: "application/json",
+    },
+  });
+  if (!res.ok) return null;
+  const rows = await res.json();
+  return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+}
+
+async function fetchPendingVouchesCount(
+  playerId: string,
+  accessToken: string,
+): Promise<number> {
+  // Match where viewer is in any slot AND is not the logger AND status pending
+  const orFilter = [
+    `server_team_p1.eq.${playerId}`,
+    `server_team_p2.eq.${playerId}`,
+    `receiver_team_p1.eq.${playerId}`,
+    `receiver_team_p2.eq.${playerId}`,
+  ].join(",");
+  const url = `${SUPABASE_URL}/rest/v1/matches?select=id&status=eq.pending&logged_by=neq.${playerId}&or=(${orFilter})`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      apikey: ANON_KEY,
+      Accept: "application/json",
+      Prefer: "count=exact",
+    },
+  });
+  if (!res.ok) return 0;
+  // Content-Range header: "0-N/total"
+  const range = res.headers.get("content-range");
+  if (range) {
+    const total = parseInt(range.split("/")[1] ?? "0", 10);
+    return Number.isFinite(total) ? total : 0;
+  }
+  const data = await res.json();
+  return Array.isArray(data) ? data.length : 0;
+}
+
+// =============================================================
+// Menu UI atoms
+// =============================================================
 
 interface MenuItemProps {
   href: string;
