@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -419,9 +420,12 @@ function PlayerLine({
       </div>
     );
   }
-  return (
+
+  // Guests don't have profiles to navigate to (until they claim their account)
+  const isClickable = !player.is_guest;
+  const inner = (
     <div
-      className={`mt-1.5 flex min-w-0 items-center gap-1.5 ${
+      className={`flex min-w-0 items-center gap-1.5 ${
         align === "right" ? "flex-row-reverse" : ""
       }`}
     >
@@ -435,6 +439,19 @@ function PlayerLine({
         {player.display_name}
       </span>
     </div>
+  );
+
+  if (!isClickable) {
+    return <div className="mt-1.5">{inner}</div>;
+  }
+
+  return (
+    <Link
+      href={`/profile/${player.id}`}
+      className="mt-1.5 block transition hover:opacity-80"
+    >
+      {inner}
+    </Link>
   );
 }
 

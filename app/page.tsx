@@ -6,6 +6,7 @@ import { useState } from "react";
 import AuthButton from "@/components/AuthButton";
 import StartRallyButton from "@/components/StartRallyButton";
 import CityTimeline from "@/components/matches/CityTimeline";
+import CourtLadder from "@/components/courts/CourtLadder";
 import type { CityNode } from "@/lib/types";
 
 const USMap = dynamic(() => import("@/components/USMap"), {
@@ -76,7 +77,7 @@ export default function HomePage() {
             <div className="mt-8 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
               Courts
             </div>
-            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+            <ul className="mt-3 grid gap-3 sm:grid-cols-2">
               {selectedCity.courts
                 .slice()
                 .sort((a, b) => a.name.localeCompare(b.name))
@@ -91,6 +92,7 @@ export default function HomePage() {
                     <div className="mt-1 font-display text-display-xs uppercase font-semibold tracking-wide text-white/60">
                       {c.type}
                     </div>
+                    <CourtLadder courtId={c.id} />
                   </li>
                 ))}
             </ul>
