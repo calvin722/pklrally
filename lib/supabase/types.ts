@@ -20,6 +20,8 @@ export type Database = {
           city: string | null;
           state: string | null;
           dupr_self_rating: number | null;
+          avatar_focal_x: number;
+          avatar_focal_y: number;
           is_admin: boolean;
           is_guest: boolean;
           claimed_at: string | null;

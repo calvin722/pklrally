@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentPlayer } from "@/lib/supabase/getCurrentPlayer";
-import OnboardingForm from "@/components/welcome/OnboardingForm";
+import WelcomeFlow from "@/components/welcome/WelcomeFlow";
 
 export const dynamic = "force-dynamic";
 
@@ -11,22 +11,14 @@ export default async function WelcomePage() {
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-black p-4 grid-bg">
-      <div className="w-full max-w-md rounded-2xl border-2 border-pickle bg-black p-8 neon-pickle">
+      <div className="w-full max-w-xl rounded-2xl border-2 border-pickle bg-black p-8 neon-pickle">
         <h1 className="font-display text-display-xl font-extrabold leading-none text-pickle">
           PKL<span className="text-bright">RALLY</span>
         </h1>
-        <p className="mt-1 text-sm text-white/60">welcome to the live pulse</p>
+        <p className="mt-1 text-sm text-white/60">the live pulse of pickleball</p>
 
-        <h2 className="mt-8 font-display text-display-lg font-extrabold text-white">
-          Tell us who you are
-        </h2>
-        <p className="mt-2 text-base text-white/60">
-          Two quick fields to get started. You can add a profile picture, city,
-          and more later from your profile.
-        </p>
-
-        <div className="mt-6">
-          <OnboardingForm
+        <div className="mt-8">
+          <WelcomeFlow
             playerId={player.id}
             initialDisplayName={player.display_name}
             initialDupr={player.dupr_self_rating}

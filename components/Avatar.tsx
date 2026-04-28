@@ -1,14 +1,16 @@
 /**
- * Avatar component — renders the player's profile image if uploaded,
- * otherwise falls back to a colored circle with the first letter of their name.
+ * Avatar — renders profile image with optional focal point, or a fallback
+ * colored circle with the player's first initial.
  *
  * Used everywhere a player needs visual identity (MatchCard, AuthButton,
- * profile header, vouch list, leaderboard, etc.).
+ * profile header, vouch list, leaderboard).
  */
 interface AvatarPlayer {
   id?: string;
   display_name: string;
   avatar_url?: string | null;
+  avatar_focal_x?: number | null;
+  avatar_focal_y?: number | null;
   is_guest?: boolean;
 }
 
@@ -36,11 +38,14 @@ export default function Avatar({
   const textColor = player.is_guest ? "text-bright" : "text-pickle";
 
   if (player.avatar_url) {
+    const fx = player.avatar_focal_x ?? 50;
+    const fy = player.avatar_focal_y ?? 50;
     // eslint-disable-next-line @next/next/no-img-element
     return (
       <img
         src={player.avatar_url}
         alt={player.display_name}
+        style={{ objectPosition: `${fx}% ${fy}%` }}
         className={`shrink-0 rounded-full border-2 object-cover ${ringColor} ${SIZE_CLASSES[size]} ${className}`}
       />
     );

@@ -112,6 +112,8 @@ export default async function ProfilePage({ params }: PageProps) {
                     id: player.id,
                     display_name: player.display_name,
                     avatar_url: player.avatar_url,
+                    avatar_focal_x: player.avatar_focal_x,
+                    avatar_focal_y: player.avatar_focal_y,
                   }}
                 />
               </div>
