@@ -4,15 +4,20 @@
  * Bypasses email entirely — no rate limit, prints the URL to your terminal,
  * you paste it into the browser.
  *
- * Usage: node scripts/dev-magic-link.mjs your@email.com
+ * Usage:
+ *   node scripts/dev/dev-magic-link.mjs your@email.com [redirectTo]
+ *
+ * redirectTo defaults to production. Pass "http://localhost:3000/auth/callback"
+ * for local dev testing.
  */
 
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 
-// Hand-roll a tiny .env.local parser so we don't add a dotenv dep
+// Hand-roll a tiny .env.local parser so we don't add a dotenv dep.
+// Script lives at scripts/dev/dev-magic-link.mjs — .env.local is two levels up.
 const env = Object.fromEntries(
-  readFileSync(new URL("../.env.local", import.meta.url), "utf8")
+  readFileSync(new URL("../../.env.local", import.meta.url), "utf8")
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith("#"))
@@ -25,13 +30,17 @@ const env = Object.fromEntries(
 const url = env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
 const email = process.argv[2];
+const redirectTo =
+  process.argv[3] ?? "https://pklrally.netlify.app/auth/callback";
 
 if (!url || !serviceRoleKey) {
   console.error("Missing SUPABASE env vars in .env.local");
   process.exit(1);
 }
 if (!email) {
-  console.error("Usage: node scripts/dev-magic-link.mjs your@email.com");
+  console.error(
+    "Usage: node scripts/dev/dev-magic-link.mjs your@email.com [redirectTo]",
+  );
   process.exit(1);
 }
 
@@ -42,9 +51,7 @@ const supabase = createClient(url, serviceRoleKey, {
 const { data, error } = await supabase.auth.admin.generateLink({
   type: "magiclink",
   email,
-  options: {
-    redirectTo: "http://localhost:3000/auth/callback",
-  },
+  options: { redirectTo },
 });
 
 if (error) {
