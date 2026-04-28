@@ -53,54 +53,57 @@ export default function HomePage() {
         <USMap onCitySelect={setSelectedCity} />
       </div>
 
-      {/* City selection panel — placeholder for Phase 5 Local Timeline */}
+      {/* City takeover — full-screen panel for the timeline + courts */}
       {selectedCity && (
-        <div className="no-scrollbar absolute right-0 top-0 bottom-0 z-40 w-full max-w-sm overflow-y-auto border-l-2 border-pickle bg-black p-5">
-          <button
-            type="button"
-            onClick={() => setSelectedCity(null)}
-            className="mb-4 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle"
-            aria-label="Close city panel"
-          >
-            ◀ Back
-          </button>
-          <h2 className="font-display text-display-xl font-extrabold text-bright">
-            {selectedCity.city}
-          </h2>
-          <p className="mt-1 text-base text-white/70">
-            {selectedCity.state} · {selectedCity.recentMatches} matches last 30
-            days
-          </p>
-          <div className="mt-6 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
-            Courts
-          </div>
-          <ul className="mt-3 space-y-2">
-            {selectedCity.courts
-              .slice()
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((c) => (
-                <li
-                  key={c.id}
-                  className="rounded-xl border-2 border-white/30 bg-black p-4 transition hover:border-pickle"
-                >
-                  <div className="font-sans text-base font-medium text-white">
-                    {c.name}
-                  </div>
-                  <div className="mt-1 font-display text-display-xs uppercase font-semibold tracking-wide text-white/60">
-                    {c.type}
-                  </div>
-                </li>
-              ))}
-          </ul>
+        <div className="no-scrollbar absolute inset-0 z-40 overflow-y-auto bg-black">
+          <div className="mx-auto max-w-2xl p-5">
+            <button
+              type="button"
+              onClick={() => setSelectedCity(null)}
+              className="mb-4 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle"
+              aria-label="Back to map"
+            >
+              ◀ Back to map
+            </button>
+            <h2 className="font-display text-display-2xl font-extrabold text-bright">
+              {selectedCity.city}
+            </h2>
+            <p className="mt-1 text-base text-white/70">
+              {selectedCity.state} · {selectedCity.recentMatches} matches last
+              30 days
+            </p>
 
-          <div className="mt-8 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
-            Recent rallies
-          </div>
-          <div className="mt-3">
-            <CityTimeline
-              city={selectedCity.city}
-              state={selectedCity.state}
-            />
+            <div className="mt-8 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
+              Courts
+            </div>
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+              {selectedCity.courts
+                .slice()
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((c) => (
+                  <li
+                    key={c.id}
+                    className="rounded-xl border-2 border-white/30 bg-black p-4 transition hover:border-pickle"
+                  >
+                    <div className="font-sans text-base font-medium text-white">
+                      {c.name}
+                    </div>
+                    <div className="mt-1 font-display text-display-xs uppercase font-semibold tracking-wide text-white/60">
+                      {c.type}
+                    </div>
+                  </li>
+                ))}
+            </ul>
+
+            <div className="mt-10 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
+              Recent rallies
+            </div>
+            <div className="mt-3">
+              <CityTimeline
+                city={selectedCity.city}
+                state={selectedCity.state}
+              />
+            </div>
           </div>
         </div>
       )}
