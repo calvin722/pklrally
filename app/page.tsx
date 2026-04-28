@@ -1,0 +1,109 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import AuthButton from "@/components/AuthButton";
+import StartRallyButton from "@/components/StartRallyButton";
+import CityTimeline from "@/components/matches/CityTimeline";
+import type { CityNode } from "@/lib/types";
+
+const USMap = dynamic(() => import("@/components/USMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full w-full items-center justify-center bg-black">
+      <span className="font-display text-display-sm uppercase font-semibold tracking-wide text-pickle animate-flicker">
+        Loading map...
+      </span>
+    </div>
+  ),
+});
+
+export default function HomePage() {
+  const router = useRouter();
+  const [selectedCity, setSelectedCity] = useState<CityNode | null>(null);
+
+  return (
+    <main className="relative flex h-svh w-full flex-col overflow-hidden bg-black">
+      {/* Top bar — wordmark + sign-in */}
+      <header className="relative z-30 flex items-center justify-between px-4 pt-4">
+        <div>
+          <h1 className="font-display text-display-xl font-extrabold leading-none text-pickle">
+            PKL<span className="text-bright">RALLY</span>
+          </h1>
+          <p className="mt-1 text-sm text-white/60">
+            the live pulse of pickleball
+          </p>
+        </div>
+        <nav className="flex items-center gap-2">
+          <AuthButton />
+        </nav>
+      </header>
+
+      {/* Start Rally — sits above the map, centered chunky banner */}
+      <div className="z-20 flex justify-center px-4 py-4">
+        <StartRallyButton
+          className="w-full max-w-md"
+          onClick={() => router.push("/rally/new")}
+        />
+      </div>
+
+      {/* The map — fills remaining height */}
+      <div className="relative min-h-0 flex-1">
+        <USMap onCitySelect={setSelectedCity} />
+      </div>
+
+      {/* City selection panel — placeholder for Phase 5 Local Timeline */}
+      {selectedCity && (
+        <div className="no-scrollbar absolute right-0 top-0 bottom-0 z-40 w-full max-w-sm overflow-y-auto border-l-2 border-pickle bg-black p-5">
+          <button
+            type="button"
+            onClick={() => setSelectedCity(null)}
+            className="mb-4 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle"
+            aria-label="Close city panel"
+          >
+            ◀ Back
+          </button>
+          <h2 className="font-display text-display-xl font-extrabold text-bright">
+            {selectedCity.city}
+          </h2>
+          <p className="mt-1 text-base text-white/70">
+            {selectedCity.state} · {selectedCity.recentMatches} matches last 30
+            days
+          </p>
+          <div className="mt-6 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
+            Courts
+          </div>
+          <ul className="mt-3 space-y-2">
+            {selectedCity.courts
+              .slice()
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((c) => (
+                <li
+                  key={c.id}
+                  className="rounded-xl border-2 border-white/30 bg-black p-4 transition hover:border-pickle"
+                >
+                  <div className="font-sans text-base font-medium text-white">
+                    {c.name}
+                  </div>
+                  <div className="mt-1 font-display text-display-xs uppercase font-semibold tracking-wide text-white/60">
+                    {c.type}
+                  </div>
+                </li>
+              ))}
+          </ul>
+
+          <div className="mt-8 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
+            Recent rallies
+          </div>
+          <div className="mt-3">
+            <CityTimeline
+              city={selectedCity.city}
+              state={selectedCity.state}
+            />
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}

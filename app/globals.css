@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* -------------------------------------------------------------
+   Modern neon base — black canvas, smooth fonts, neon accents
+   ------------------------------------------------------------- */
+@layer base {
+  html,
+  body {
+    background: #000000;
+    color: #ffffff;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior: none;
+  }
+
+  ::selection {
+    background: #99ff00;
+    color: #000000;
+  }
+
+  /* Hide scrollbar chrome on opt-in containers */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Inputs inherit the body font by default — keeps the look consistent */
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+  }
+}
+
+/* -------------------------------------------------------------
+   Component utilities — soft-stamp buttons, neon glow, dither
+   ------------------------------------------------------------- */
+@layer utilities {
+  /* Chunky stamped-key button: hard offset shadow + rounded corners.
+     Modern evolution of the old pixel-stamp — same playfulness, smoother edges. */
+  .soft-stamp {
+    box-shadow:
+      0 4px 0 0 rgba(0, 0, 0, 0.9),
+      inset 0 0 0 2px currentColor;
+    transition: transform 80ms ease, box-shadow 80ms ease;
+  }
+  .soft-stamp:active {
+    transform: translateY(4px);
+    box-shadow:
+      0 0 0 0 rgba(0, 0, 0, 0.9),
+      inset 0 0 0 2px currentColor;
+  }
+
+  /* Neon outline — used on cards and panels we want to glow at the edge */
+  .neon-pickle {
+    box-shadow:
+      0 0 0 2px #99ff00,
+      0 0 16px rgba(153, 255, 0, 0.25);
+  }
+  .neon-electric {
+    box-shadow:
+      0 0 0 2px #00bfff,
+      0 0 16px rgba(0, 191, 255, 0.25);
+  }
+  .neon-bright {
+    box-shadow:
+      0 0 0 2px #ffff00,
+      0 0 16px rgba(255, 255, 0, 0.25);
+  }
+
+  /* Subtle dither pattern — for backgrounds that want a little texture */
+  .dither-25 {
+    background-image: radial-gradient(
+      currentColor 1px,
+      transparent 1px
+    );
+    background-size: 4px 4px;
+  }
+
+  /* Faint pickle-green grid background — graph paper feel */
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, rgba(153, 255, 0, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(153, 255, 0, 0.06) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  /* Buzzing glow — applied via JS when a court has recent activity */
+  .buzz-pickle {
+    animation: buzz 1.2s ease-in-out infinite;
+  }
+  .buzz-electric {
+    animation: buzz-electric 1.2s ease-in-out infinite;
+  }
+}
+
+/* Electric blue version of the buzz keyframe (for private courts later) */
+@keyframes buzz-electric {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px #00bfff) drop-shadow(0 0 6px #00bfff);
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 8px #00bfff) drop-shadow(0 0 16px #00bfff);
+    transform: scale(1.18);
+  }
+}

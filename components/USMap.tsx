@@ -1,0 +1,158 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import {
+  ComposableMap,
+  Geographies,
+  Geography,
+  Marker,
+  ZoomableGroup,
+} from "react-simple-maps";
+import { fetchCityNodes, isCityBuzzing } from "@/lib/courts";
+import type { CityNode } from "@/lib/types";
+
+const US_TOPO_URL =
+  "https://cdn.jsdelivr.net/npm/us-atlas@3.0.1/states-10m.json";
+
+interface USMapProps {
+  onCitySelect?: (city: CityNode) => void;
+}
+
+export default function USMap({ onCitySelect }: USMapProps) {
+  const [hoveredCity, setHoveredCity] = useState<string | null>(null);
+  const [rawCities, setRawCities] = useState<CityNode[]>([]);
+
+  // Fetch live courts from Supabase on mount + every 30 seconds.
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      const data = await fetchCityNodes();
+      if (alive) setRawCities(data);
+    }
+    load();
+    const interval = setInterval(load, 30_000);
+    return () => {
+      alive = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const cities = useMemo(
+    () => rawCities.map((c) => ({ ...c, buzzing: isCityBuzzing(c) })),
+    [rawCities],
+  );
+
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-black grid-bg">
+      <ComposableMap
+        projection="geoAlbersUsa"
+        projectionConfig={{ scale: 1000 }}
+        width={800}
+        height={500}
+        style={{ width: "100%", height: "100%" }}
+      >
+        <ZoomableGroup
+          center={[-96, 38]}
+          zoom={1}
+          minZoom={1}
+          maxZoom={8}
+          translateExtent={[
+            [-200, -100],
+            [1000, 600],
+          ]}
+        >
+          <Geographies geography={US_TOPO_URL}>
+            {({ geographies }) =>
+              geographies.map((geo) => (
+                <Geography
+                  key={geo.rsmKey}
+                  geography={geo}
+                  fill="#000000"
+                  stroke="#5C9900"
+                  strokeWidth={0.6}
+                  style={{
+                    default: { outline: "none" },
+                    hover: { outline: "none", fill: "#0a1a00" },
+                    pressed: { outline: "none", fill: "#0a1a00" },
+                  }}
+                />
+              ))
+            }
+          </Geographies>
+
+          {cities.map((city) => {
+            const key = `${city.city}-${city.state}`;
+            const isHovered = hoveredCity === key;
+            const r = Math.min(7, Math.max(4, 3 + city.recentMatches / 40));
+
+            return (
+              <Marker
+                key={key}
+                coordinates={city.coordinates}
+                onMouseEnter={() => setHoveredCity(key)}
+                onMouseLeave={() => setHoveredCity(null)}
+                onClick={() => onCitySelect?.(city)}
+                style={{
+                  default: { cursor: "pointer", outline: "none" },
+                  hover: { cursor: "pointer", outline: "none" },
+                  pressed: { cursor: "pointer", outline: "none" },
+                }}
+              >
+                <g
+                  className={city.buzzing ? "buzz-pickle" : ""}
+                  style={{
+                    transformBox: "fill-box",
+                    transformOrigin: "center",
+                  }}
+                >
+                  {/* Smooth circle dot — modern, no more pixel squares */}
+                  <circle
+                    r={r}
+                    fill={city.buzzing ? "#99FF00" : "#FFFF00"}
+                    stroke="#000000"
+                    strokeWidth={1}
+                  />
+                </g>
+
+                {(city.buzzing || isHovered) && (
+                  <text
+                    x={r + 5}
+                    y={4}
+                    textAnchor="start"
+                    fill="#FFFFFF"
+                    style={{
+                      fontFamily: "var(--font-display), system-ui, sans-serif",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      paintOrder: "stroke",
+                      stroke: "#000000",
+                      strokeWidth: 3,
+                      strokeLinejoin: "round",
+                    }}
+                  >
+                    {city.city}
+                  </text>
+                )}
+              </Marker>
+            );
+          })}
+        </ZoomableGroup>
+      </ComposableMap>
+
+      {/* Legend — middle-left, rounded panel with neon edge */}
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 rounded-xl border-2 border-pickle bg-black/85 p-4 backdrop-blur-sm">
+        <div className="mb-3 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
+          Live Pulse
+        </div>
+        <div className="flex items-center gap-2 text-sm text-white">
+          <span className="buzz-pickle inline-block h-3 w-3 rounded-full bg-pickle" />
+          <span>Active &lt; 60 min</span>
+        </div>
+        <div className="mt-1.5 flex items-center gap-2 text-sm text-white">
+          <span className="inline-block h-3 w-3 rounded-full bg-bright" />
+          <span>Static</span>
+        </div>
+      </div>
+    </div>
+  );
+}

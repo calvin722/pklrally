@@ -1,0 +1,202 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { searchPlayers, type PlayerSlot as PlayerSlotData } from "@/lib/rally";
+
+interface PlayerHit {
+  id: string;
+  display_name: string;
+  is_guest: boolean;
+  email: string | null;
+}
+
+interface PlayerSlotProps {
+  /** Current slot value (filled or empty). */
+  value: PlayerSlotData | null;
+  /** Slot is the active editor — only one slot expanded at a time. */
+  isActive: boolean;
+  /** Called when user taps the slot. */
+  onActivate: () => void;
+  /** Called when user picks a player or adds a guest. */
+  onPick: (slot: PlayerSlotData) => void;
+  /** Called when user clears a filled slot. */
+  onClear: () => void;
+  /** Player IDs already used in other slots — filtered from search results. */
+  excludeIds: string[];
+  /** Show the active-server star. */
+  isServer?: boolean;
+  /** Color accent — top half is pickle (serving), bottom is electric. */
+  accent: "pickle" | "electric";
+}
+
+export default function PlayerSlot({
+  value,
+  isActive,
+  onActivate,
+  onPick,
+  onClear,
+  excludeIds,
+  isServer = false,
+  accent,
+}: PlayerSlotProps) {
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<PlayerHit[]>([]);
+  const [searching, setSearching] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Debounced search
+  useEffect(() => {
+    if (!query.trim() || query.trim().length < 2) {
+      setHits([]);
+      return;
+    }
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      const results = await searchPlayers(query);
+      setHits(results.filter((r) => !excludeIds.includes(r.id)));
+      setSearching(false);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [query, excludeIds]);
+
+  // Auto-focus the search input when activated
+  useEffect(() => {
+    if (isActive && !value && inputRef.current) inputRef.current.focus();
+  }, [isActive, value]);
+
+  const accentBorder =
+    accent === "pickle" ? "border-pickle" : "border-electric";
+  const accentText = accent === "pickle" ? "text-pickle" : "text-electric";
+  const accentDimBorder =
+    accent === "pickle" ? "border-pickle/40" : "border-electric/40";
+
+  // FILLED state
+  if (value && !isActive) {
+    return (
+      <button
+        type="button"
+        onClick={onActivate}
+        className={`relative w-full rounded-xl border-2 ${accentBorder} ${
+          isServer ? "neon-pickle" : ""
+        } bg-black p-3 text-left transition hover:border-white`}
+      >
+        {isServer && (
+          <span className="absolute -top-2 left-3 rounded-full bg-pickle px-2 py-0.5 font-display text-[10px] font-extrabold uppercase tracking-wider text-black">
+            ★ Server
+          </span>
+        )}
+        <div
+          className={`font-display text-display-base font-bold ${
+            value.kind === "me" ? "text-pickle" : "text-white"
+          } truncate`}
+        >
+          {value.displayName}
+        </div>
+        <div className={`mt-1 text-xs ${accentText} font-semibold uppercase tracking-wide`}>
+          {value.kind === "me" ? "You" : value.kind === "guest" ? "Guest" : "Member"}
+        </div>
+        <span
+          className="absolute right-2 top-2 rounded-md border border-white/30 px-1.5 py-0.5 text-[10px] text-white/50 hover:border-white hover:text-white"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClear();
+          }}
+        >
+          ✕
+        </span>
+      </button>
+    );
+  }
+
+  // EMPTY collapsed
+  if (!isActive) {
+    return (
+      <button
+        type="button"
+        onClick={onActivate}
+        className={`relative w-full rounded-xl border-2 border-dashed ${accentDimBorder} bg-black p-3 text-left transition hover:border-solid hover:${accentBorder}`}
+      >
+        {isServer && (
+          <span className="absolute -top-2 left-3 rounded-full bg-pickle px-2 py-0.5 font-display text-[10px] font-extrabold uppercase tracking-wider text-black">
+            ★ Server
+          </span>
+        )}
+        <div className={`font-display text-display-sm font-bold ${accentText} uppercase tracking-wide`}>
+          + Tap to add
+        </div>
+        <div className="mt-1 text-xs text-white/40">Search or invite a guest</div>
+      </button>
+    );
+  }
+
+  // ACTIVE — search expanded
+  return (
+    <div
+      className={`relative rounded-xl border-2 ${accentBorder} bg-black p-3 ${
+        isServer ? "neon-pickle" : ""
+      }`}
+    >
+      {isServer && (
+        <span className="absolute -top-2 left-3 rounded-full bg-pickle px-2 py-0.5 font-display text-[10px] font-extrabold uppercase tracking-wider text-black">
+          ★ Server
+        </span>
+      )}
+
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search name..."
+        className="w-full rounded-lg border-2 border-white/30 bg-black px-3 py-2 text-base text-white placeholder:text-white/40 focus:border-pickle focus:outline-none"
+      />
+
+      {searching && <p className="mt-2 text-xs text-white/40">Searching...</p>}
+
+      {hits.length > 0 && (
+        <ul className="no-scrollbar mt-2 max-h-40 space-y-1 overflow-y-auto">
+          {hits.map((h) => (
+            <li key={h.id}>
+              <button
+                type="button"
+                onClick={() =>
+                  onPick({
+                    kind: h.is_guest ? "guest" : "member",
+                    playerId: h.id,
+                    displayName: h.display_name,
+                    email: h.email ?? undefined,
+                  })
+                }
+                className="w-full rounded-lg border-2 border-white/20 px-3 py-2 text-left text-sm text-white transition hover:border-pickle hover:bg-pickle/10"
+              >
+                {h.display_name}
+                {h.is_guest && (
+                  <span className="ml-2 text-xs text-bright">guest</span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {query.trim().length >= 2 && !searching && hits.length === 0 && (
+        <p className="mt-2 text-xs text-white/40">No matches.</p>
+      )}
+
+      {query.trim().length >= 2 && (
+        <button
+          type="button"
+          onClick={() =>
+            onPick({
+              kind: "guest",
+              displayName: query.trim(),
+            })
+          }
+          className="mt-3 block font-display text-display-xs uppercase font-semibold tracking-wide text-bright hover:text-pickle"
+        >
+          + Add "{query.trim()}" as guest
+        </button>
+      )}
+    </div>
+  );
+}

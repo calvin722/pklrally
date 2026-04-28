@@ -1,0 +1,50 @@
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+import type { Database } from "./types";
+
+/**
+ * Server-side Supabase client for Server Components, Server Actions,
+ * and Route Handlers. Reads cookies via Next.js's cookies() helper.
+ *
+ * Note: this awaits cookies() because Next.js 15 made it async.
+ */
+export async function createClient() {
+  const cookieStore = await cookies();
+
+  return createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
+          } catch {
+            // Server Components can't set cookies — middleware does that.
+            // Safe to swallow this error during SSR rendering.
+          }
+        },
+      },
+    },
+  );
+}
+
+/**
+ * Privileged server-side client using the service_role key.
+ * Bypasses RLS — use ONLY in admin routes / cron jobs / trusted server code.
+ * Never import this from a client component.
+ */
+export function createAdminClient() {
+  // Lazy import to avoid bundling auth-helpers when this client isn't used.
+  const { createClient } = require("@supabase/supabase-js");
+  return createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+}
