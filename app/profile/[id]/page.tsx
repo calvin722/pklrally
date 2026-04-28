@@ -125,7 +125,10 @@ export default async function ProfilePage({ params }: PageProps) {
               </h2>
               <ProfileEditor
                 playerId={player.id}
-                initialDisplayName={player.display_name}
+                initialUsername={player.username}
+                initialFirstName={player.first_name}
+                initialLastName={player.last_name}
+                initialNamePublic={player.name_public}
                 initialDupr={player.dupr_self_rating}
                 initialCity={player.city}
                 initialState={player.state}

@@ -22,6 +22,10 @@ export type Database = {
           dupr_self_rating: number | null;
           avatar_focal_x: number;
           avatar_focal_y: number;
+          username: string | null;
+          first_name: string | null;
+          last_name: string | null;
+          name_public: boolean;
           is_admin: boolean;
           is_guest: boolean;
           claimed_at: string | null;

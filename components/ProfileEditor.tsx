@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 interface ProfileEditorProps {
   playerId: string;
-  initialDisplayName: string;
+  initialUsername: string | null;
+  initialFirstName: string | null;
+  initialLastName: string | null;
+  initialNamePublic: boolean;
   initialDupr: number | null;
   initialCity: string | null;
   initialState: string | null;
@@ -14,27 +17,82 @@ interface ProfileEditorProps {
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
 const inputStyle =
   "w-full rounded-lg border-2 border-white bg-black px-4 py-3 text-base text-white placeholder:text-white/40 focus:border-pickle focus:outline-none";
 
 export default function ProfileEditor({
   playerId,
-  initialDisplayName,
+  initialUsername,
+  initialFirstName,
+  initialLastName,
+  initialNamePublic,
   initialDupr,
   initialCity,
   initialState,
 }: ProfileEditorProps) {
   const router = useRouter();
 
-  const [displayName, setDisplayName] = useState(initialDisplayName);
-  const [dupr, setDupr] = useState<number>(initialDupr ?? 3.0);
+  const [username, setUsernameRaw] = useState(initialUsername ?? "");
+  const [firstName, setFirstName] = useState(initialFirstName ?? "");
+  const [lastName, setLastName] = useState(initialLastName ?? "");
+  const [namePublic, setNamePublic] = useState(initialNamePublic);
+  const [rating, setRating] = useState<number>(initialDupr ?? 3.0);
   const [city, setCity] = useState(initialCity ?? "");
   const [stateCode, setStateCode] = useState(initialState ?? "");
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [error, setError] = useState<string | null>(null);
 
+  const setUsername = (v: string) =>
+    setUsernameRaw(v.toLowerCase().replace(/\s+/g, ""));
+
+  const [usernameStatus, setUsernameStatus] = useState<
+    "idle" | "checking" | "available" | "taken" | "invalid"
+  >(initialUsername ? "available" : "idle");
+  const usernameDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (usernameDebounce.current) clearTimeout(usernameDebounce.current);
+    if (!username) {
+      setUsernameStatus("idle");
+      return;
+    }
+    if (!/^[a-z0-9_]{3,20}$/.test(username)) {
+      setUsernameStatus("invalid");
+      return;
+    }
+    if (username === initialUsername) {
+      setUsernameStatus("available");
+      return;
+    }
+    setUsernameStatus("checking");
+    usernameDebounce.current = setTimeout(async () => {
+      try {
+        const url = `${SUPABASE_URL}/rest/v1/players?select=id&username=eq.${encodeURIComponent(username)}&limit=1`;
+        const res = await fetch(url, {
+          headers: { apikey: ANON_KEY, Accept: "application/json" },
+        });
+        const rows = await res.json();
+        setUsernameStatus(
+          Array.isArray(rows) && rows.length > 0 ? "taken" : "available",
+        );
+      } catch {
+        setUsernameStatus("idle");
+      }
+    }, 350);
+    return () => {
+      if (usernameDebounce.current) clearTimeout(usernameDebounce.current);
+    };
+  }, [username, initialUsername]);
+
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (usernameStatus !== "available") {
+      setError("Pick an available username before saving.");
+      return;
+    }
     setStatus("saving");
     setError(null);
 
@@ -42,8 +100,11 @@ export default function ProfileEditor({
     const { error } = await supabase
       .from("players")
       .update({
-        display_name: displayName.trim(),
-        dupr_self_rating: dupr,
+        username: username.toLowerCase().trim(),
+        first_name: firstName.trim() || null,
+        last_name: lastName.trim() || null,
+        name_public: namePublic,
+        dupr_self_rating: rating,
         city: city.trim() || null,
         state: stateCode.trim().toUpperCase() || null,
       })
@@ -62,25 +123,75 @@ export default function ProfileEditor({
 
   return (
     <form onSubmit={handleSave} className="mt-4 space-y-5">
-      <Field label="Display name">
-        <input
-          type="text"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          required
-          maxLength={40}
-          className={inputStyle}
-        />
+      {/* Username */}
+      <Field label="Username">
+        <div className="relative">
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+            maxLength={20}
+            placeholder="e.g. calvin722"
+            className={`${inputStyle} pr-32`}
+          />
+          <UsernameStatusBadge status={usernameStatus} />
+        </div>
+        <p className="mt-1.5 text-xs text-white/50">
+          3–20 chars, lowercase letters, numbers, or underscores only.
+        </p>
       </Field>
 
-      <Field label={`DUPR self-rating — ${dupr.toFixed(1)}`}>
+      {/* First / Last name */}
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="First name">
+          <input
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            maxLength={40}
+            className={inputStyle}
+          />
+        </Field>
+        <Field label="Last name">
+          <input
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            maxLength={40}
+            className={inputStyle}
+          />
+        </Field>
+      </div>
+
+      {/* Name privacy toggle */}
+      <label className="flex cursor-pointer items-start gap-3 rounded-xl border-2 border-white/30 p-4">
+        <input
+          type="checkbox"
+          checked={namePublic}
+          onChange={(e) => setNamePublic(e.target.checked)}
+          className="mt-1 h-5 w-5 shrink-0 accent-pickle"
+        />
+        <div>
+          <div className="font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
+            Display my name publicly
+          </div>
+          <p className="mt-1 text-sm text-white/60 leading-relaxed">
+            When on, your real name shows in matches and leaderboards. When
+            off, only your username is shown.
+          </p>
+        </div>
+      </label>
+
+      {/* Self-rating */}
+      <Field label={`Self-rating (${rating.toFixed(2)})`}>
         <input
           type="range"
           min={2.0}
           max={8.0}
-          step={0.5}
-          value={dupr}
-          onChange={(e) => setDupr(parseFloat(e.target.value))}
+          step={0.25}
+          value={rating}
+          onChange={(e) => setRating(parseFloat(e.target.value))}
           className="w-full accent-pickle"
         />
         <div className="mt-1 flex justify-between font-mono text-xs text-white/40">
@@ -88,6 +199,10 @@ export default function ProfileEditor({
           <span>5.0</span>
           <span>8.0</span>
         </div>
+        <p className="mt-2 text-xs text-white/50 leading-relaxed">
+          2.0 = beginner · 3.0–4.0 = intermediate · 4.0–5.0 = advanced · 5.0+
+          = elite.
+        </p>
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
@@ -116,7 +231,7 @@ export default function ProfileEditor({
       <div className="flex items-center gap-3">
         <button
           type="submit"
-          disabled={status === "saving"}
+          disabled={status === "saving" || usernameStatus !== "available"}
           className="soft-stamp rounded-xl bg-pickle px-6 py-3 font-display text-display-base font-extrabold uppercase tracking-wide text-black disabled:opacity-50"
         >
           {status === "saving" ? "Saving..." : "Save"}
@@ -148,5 +263,27 @@ function Field({
       </span>
       <div className="mt-2">{children}</div>
     </label>
+  );
+}
+
+function UsernameStatusBadge({
+  status,
+}: {
+  status: "idle" | "checking" | "available" | "taken" | "invalid";
+}) {
+  if (status === "idle") return null;
+  const messages = {
+    checking: { text: "...", color: "text-white/40" },
+    available: { text: "✓ available", color: "text-pickle" },
+    taken: { text: "✗ taken", color: "text-bright" },
+    invalid: { text: "invalid", color: "text-bright" },
+  } as const;
+  const m = messages[status];
+  return (
+    <span
+      className={`absolute right-3 top-1/2 -translate-y-1/2 font-display text-xs font-semibold uppercase tracking-wide ${m.color}`}
+    >
+      {m.text}
+    </span>
   );
 }

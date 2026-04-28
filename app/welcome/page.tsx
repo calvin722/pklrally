@@ -20,7 +20,10 @@ export default async function WelcomePage() {
         <div className="mt-8">
           <WelcomeFlow
             playerId={player.id}
-            initialDisplayName={player.display_name}
+            initialUsername={player.username}
+            initialFirstName={player.first_name}
+            initialLastName={player.last_name}
+            initialNamePublic={player.name_public}
             initialDupr={player.dupr_self_rating}
           />
         </div>
