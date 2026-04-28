@@ -45,14 +45,21 @@ export async function fetchCityNodes(): Promise<CityNode[]> {
     });
   }
 
-  return (pulseRes.data ?? []).map((p) => ({
-    city: p.city,
-    state: p.state,
-    coordinates: [Number(p.longitude), Number(p.latitude)] as [number, number],
-    courts: byCity.get(`${p.city}|${p.state}`) ?? [],
-    lastMatchAt: p.last_match_at,
-    recentMatches: p.recent_match_count ?? 0,
-  }));
+  return (pulseRes.data ?? []).map((p) => {
+    const cityCourts = byCity.get(`${p.city}|${p.state}`) ?? [];
+    return {
+      city: p.city,
+      state: p.state,
+      coordinates: [Number(p.longitude), Number(p.latitude)] as [
+        number,
+        number,
+      ],
+      courts: cityCourts,
+      lastMatchAt: p.last_match_at,
+      recentMatches: p.recent_match_count ?? 0,
+      hasPrivate: cityCourts.some((c) => c.type === "private"),
+    };
+  });
 }
 
 /** True if the city has had a match in the last `windowMinutes` minutes. */

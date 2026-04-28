@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentPlayer } from "@/lib/supabase/getCurrentPlayer";
 import ProfileEditor from "@/components/ProfileEditor";
 import PickleballRating from "@/components/PickleballRating";
+import Avatar from "@/components/Avatar";
+import AvatarUpload from "@/components/AvatarUpload";
 
 export const dynamic = "force-dynamic";
 
@@ -52,12 +54,7 @@ export default async function ProfilePage({ params }: PageProps) {
         {/* Identity card */}
         <section className="rounded-2xl border-2 border-pickle bg-black p-6 neon-pickle">
           <div className="flex items-start gap-5">
-            <div
-              className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 border-pickle bg-black font-display text-display-xl font-extrabold text-pickle"
-              aria-hidden
-            >
-              {player.display_name.slice(0, 1).toUpperCase()}
-            </div>
+            <Avatar player={player} size="lg" />
             <div className="min-w-0 flex-1">
               <h1 className="break-words font-display text-display-2xl font-extrabold text-bright">
                 {player.display_name}
@@ -104,18 +101,35 @@ export default async function ProfilePage({ params }: PageProps) {
 
         {/* Edit form — own profile only */}
         {isMe && (
-          <section className="rounded-2xl border-2 border-bright bg-black p-6 neon-bright">
-            <h2 className="font-display text-display-xs uppercase font-semibold tracking-wide text-bright">
-              Edit profile
-            </h2>
-            <ProfileEditor
-              playerId={player.id}
-              initialDisplayName={player.display_name}
-              initialDupr={player.dupr_self_rating}
-              initialCity={player.city}
-              initialState={player.state}
-            />
-          </section>
+          <>
+            <section className="rounded-2xl border-2 border-pickle bg-black p-6">
+              <h2 className="font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
+                Profile picture
+              </h2>
+              <div className="mt-4">
+                <AvatarUpload
+                  player={{
+                    id: player.id,
+                    display_name: player.display_name,
+                    avatar_url: player.avatar_url,
+                  }}
+                />
+              </div>
+            </section>
+
+            <section className="rounded-2xl border-2 border-bright bg-black p-6 neon-bright">
+              <h2 className="font-display text-display-xs uppercase font-semibold tracking-wide text-bright">
+                Edit profile
+              </h2>
+              <ProfileEditor
+                playerId={player.id}
+                initialDisplayName={player.display_name}
+                initialDupr={player.dupr_self_rating}
+                initialCity={player.city}
+                initialState={player.state}
+              />
+            </section>
+          </>
         )}
       </div>
     </main>

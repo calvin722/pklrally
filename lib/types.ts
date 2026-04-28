@@ -29,4 +29,6 @@ export interface CityNode {
   lastMatchAt: string | null;
   /** Total match count last 30 days — drives dot size. */
   recentMatches: number;
+  /** Whether ANY court in this city is private — drives dot color (blue vs green). */
+  hasPrivate: boolean;
 }

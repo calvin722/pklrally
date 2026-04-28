@@ -11,6 +11,7 @@ export interface MatchPlayer {
   id: string;
   display_name: string;
   is_guest: boolean;
+  avatar_url: string | null;
 }
 
 export interface MatchSummary {
@@ -39,10 +40,10 @@ const SELECT_FULL = `
   receiver_score,
   logged_by,
   court:courts (id, name, city, state),
-  server_team_p1:players!matches_server_team_p1_fkey (id, display_name, is_guest),
-  server_team_p2:players!matches_server_team_p2_fkey (id, display_name, is_guest),
-  receiver_team_p1:players!matches_receiver_team_p1_fkey (id, display_name, is_guest),
-  receiver_team_p2:players!matches_receiver_team_p2_fkey (id, display_name, is_guest)
+  server_team_p1:players!matches_server_team_p1_fkey (id, display_name, is_guest, avatar_url),
+  server_team_p2:players!matches_server_team_p2_fkey (id, display_name, is_guest, avatar_url),
+  receiver_team_p1:players!matches_receiver_team_p1_fkey (id, display_name, is_guest, avatar_url),
+  receiver_team_p2:players!matches_receiver_team_p2_fkey (id, display_name, is_guest, avatar_url)
 `;
 
 // PostgREST sometimes returns embedded FK lookups as arrays. Normalize.

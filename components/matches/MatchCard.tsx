@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { vouchMatch, disputeMatch, type MatchSummary } from "@/lib/matches";
+import Avatar from "@/components/Avatar";
 
 interface MatchCardProps {
   match: MatchSummary;
@@ -28,6 +30,69 @@ export default function MatchCard({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Likes state — fetched on mount, optimistic update on toggle
+  const [likeCount, setLikeCount] = useState<number | null>(null);
+  const [iLiked, setILiked] = useState<boolean>(false);
+  const [likeBusy, setLikeBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    const supabase = createClient();
+    async function loadLikes() {
+      const { count } = await supabase
+        .from("match_likes")
+        .select("id", { count: "exact", head: true })
+        .eq("match_id", match.id);
+      if (alive) setLikeCount(count ?? 0);
+
+      if (viewerPlayerId) {
+        const { data } = await supabase
+          .from("match_likes")
+          .select("id")
+          .eq("match_id", match.id)
+          .eq("player_id", viewerPlayerId)
+          .maybeSingle();
+        if (alive) setILiked(!!data);
+      }
+    }
+    loadLikes();
+    return () => {
+      alive = false;
+    };
+  }, [match.id, viewerPlayerId]);
+
+  async function toggleLike() {
+    if (!viewerPlayerId || likeBusy) return;
+    setLikeBusy(true);
+    const supabase = createClient();
+    const wasLiked = iLiked;
+
+    // Optimistic update
+    setILiked(!wasLiked);
+    setLikeCount((c) => (c ?? 0) + (wasLiked ? -1 : 1));
+
+    if (wasLiked) {
+      const { error } = await supabase
+        .from("match_likes")
+        .delete()
+        .eq("match_id", match.id)
+        .eq("player_id", viewerPlayerId);
+      if (error) {
+        setILiked(true);
+        setLikeCount((c) => (c ?? 0) + 1);
+      }
+    } else {
+      const { error } = await supabase
+        .from("match_likes")
+        .insert({ match_id: match.id, player_id: viewerPlayerId });
+      if (error) {
+        setILiked(false);
+        setLikeCount((c) => Math.max(0, (c ?? 0) - 1));
+      }
+    }
+    setLikeBusy(false);
+  }
 
   const serverWon = match.server_score > match.receiver_score;
   const status = STATUS_LABEL[match.status] ?? STATUS_LABEL.pending;
@@ -130,30 +195,56 @@ export default function MatchCard({
         </div>
       </div>
 
-      {/* Vouch / dispute actions */}
-      {viewerCanVouch && (
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleAction("vouch")}
-            disabled={busy}
-            className="soft-stamp rounded-xl bg-pickle px-5 py-2.5 font-display text-display-xs font-extrabold uppercase tracking-wide text-black disabled:opacity-50"
-          >
-            ✓ Vouch
-          </button>
-          <button
-            type="button"
-            onClick={() => handleAction("dispute")}
-            disabled={busy}
-            className="rounded-xl border-2 border-electric bg-black px-5 py-2.5 font-display text-display-xs font-bold uppercase tracking-wide text-electric hover:bg-electric hover:text-black disabled:opacity-50"
-          >
-            ✗ Dispute
-          </button>
-          {error && (
-            <span className="text-sm text-bright">⚠ {error}</span>
-          )}
-        </div>
-      )}
+      {/* Heart / like row — always visible */}
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={toggleLike}
+          disabled={!viewerPlayerId || likeBusy}
+          className={`flex items-center gap-2 rounded-full border-2 px-3 py-1.5 transition disabled:cursor-not-allowed ${
+            iLiked
+              ? "border-bright bg-bright/10 text-bright"
+              : "border-white/30 text-white/70 hover:border-bright hover:text-bright"
+          }`}
+          aria-label={iLiked ? "Unlike" : "Like"}
+          title={
+            !viewerPlayerId
+              ? "Sign in to like matches"
+              : iLiked
+                ? "Unlike"
+                : "Like"
+          }
+        >
+          <span className="text-base leading-none">
+            {iLiked ? "♥" : "♡"}
+          </span>
+          <span className="font-mono text-sm font-bold">
+            {likeCount ?? "—"}
+          </span>
+        </button>
+
+        {viewerCanVouch && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleAction("vouch")}
+              disabled={busy}
+              className="soft-stamp rounded-xl bg-pickle px-5 py-2.5 font-display text-display-xs font-extrabold uppercase tracking-wide text-black disabled:opacity-50"
+            >
+              ✓ Vouch
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAction("dispute")}
+              disabled={busy}
+              className="rounded-xl border-2 border-electric bg-black px-5 py-2.5 font-display text-display-xs font-bold uppercase tracking-wide text-electric hover:bg-electric hover:text-black disabled:opacity-50"
+            >
+              ✗ Dispute
+            </button>
+          </div>
+        )}
+      </div>
+      {error && <span className="mt-2 block text-sm text-bright">⚠ {error}</span>}
     </div>
   );
 }
@@ -163,7 +254,12 @@ function PlayerLine({
   starServer = false,
   align = "left",
 }: {
-  player: { id: string; display_name: string; is_guest: boolean } | null;
+  player: {
+    id: string;
+    display_name: string;
+    is_guest: boolean;
+    avatar_url: string | null;
+  } | null;
   starServer?: boolean;
   align?: "left" | "right";
 }) {
@@ -182,7 +278,7 @@ function PlayerLine({
         align === "right" ? "flex-row-reverse" : ""
       }`}
     >
-      <PlayerAvatar player={player} />
+      <Avatar player={player} size="xs" />
       <span className="min-w-0 truncate text-sm text-white">
         {starServer && (
           <span className="mr-0.5 text-pickle" aria-label="server">
@@ -192,29 +288,6 @@ function PlayerLine({
         {player.display_name}
       </span>
     </div>
-  );
-}
-
-/**
- * Tiny avatar — colored circle with the player's initial.
- * Real photo upload comes later; this is the visual anchor for now.
- */
-function PlayerAvatar({
-  player,
-}: {
-  player: { display_name: string; is_guest: boolean };
-}) {
-  const initial = (player.display_name?.[0] ?? "?").toUpperCase();
-  const styles = player.is_guest
-    ? "border-bright text-bright"
-    : "border-pickle text-pickle";
-  return (
-    <span
-      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border bg-black font-mono text-[10px] font-bold ${styles}`}
-      aria-hidden
-    >
-      {initial}
-    </span>
   );
 }
 

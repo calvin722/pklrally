@@ -92,6 +92,17 @@ export default function USMap({ onCitySelect }: USMapProps) {
             const isHovered = hoveredCity === key;
             const r = Math.min(7, Math.max(4, 3 + city.recentMatches / 40));
 
+            // Cities with at least one private court use the electric-blue
+            // palette. Pure-public cities use the pickle-green palette. Both
+            // colors have buzzing variants for recent activity.
+            const isPrivate = city.hasPrivate;
+            const buzzClass = city.buzzing
+              ? isPrivate
+                ? "buzz-electric"
+                : "buzz-pickle"
+              : "";
+            const dotFill = isPrivate ? "#00BFFF" : "#99FF00";
+
             return (
               <Marker
                 key={key}
@@ -106,16 +117,16 @@ export default function USMap({ onCitySelect }: USMapProps) {
                 }}
               >
                 <g
-                  className={city.buzzing ? "buzz-pickle" : ""}
+                  className={buzzClass}
                   style={{
                     transformBox: "fill-box",
                     transformOrigin: "center",
                   }}
                 >
-                  {/* Smooth circle dot — modern, no more pixel squares */}
+                  {/* Smooth circle dot — green for public, blue for private */}
                   <circle
                     r={r}
-                    fill={city.buzzing ? "#99FF00" : "#FFFF00"}
+                    fill={dotFill}
                     stroke="#000000"
                     strokeWidth={1}
                   />
@@ -164,11 +175,19 @@ export default function USMap({ onCitySelect }: USMapProps) {
           </div>
           <div className="flex items-center gap-2 text-sm text-white">
             <span className="buzz-pickle inline-block h-3 w-3 rounded-full bg-pickle" />
-            <span>Active &lt; 60 min</span>
+            <span>Public · active</span>
           </div>
           <div className="mt-1.5 flex items-center gap-2 text-sm text-white">
-            <span className="inline-block h-3 w-3 rounded-full bg-bright" />
-            <span>Static</span>
+            <span className="inline-block h-3 w-3 rounded-full bg-pickle" />
+            <span>Public · static</span>
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 text-sm text-white">
+            <span className="buzz-electric inline-block h-3 w-3 rounded-full bg-electric" />
+            <span>Private · active</span>
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 text-sm text-white">
+            <span className="inline-block h-3 w-3 rounded-full bg-electric" />
+            <span>Private · static</span>
           </div>
         </div>
       ) : (
