@@ -23,6 +23,7 @@ export type Database = {
           is_admin: boolean;
           is_guest: boolean;
           claimed_at: string | null;
+          onboarding_completed_at: string | null;
           matches_played: number;
           wins: number;
           losses: number;

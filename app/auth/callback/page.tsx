@@ -32,7 +32,9 @@ export default function AuthCallbackPage() {
       const hashRaw = window.location.hash.slice(1); // drop the leading '#'
       const hash = new URLSearchParams(hashRaw);
 
-      const next = search.get("next") || hash.get("next") || "/";
+      // Default redirect target after successful auth is /welcome, which itself
+      // bounces to / for users who've already completed onboarding.
+      const next = search.get("next") || hash.get("next") || "/welcome";
 
       // 4) Error from Supabase (in either query or hash)
       const errParam =
