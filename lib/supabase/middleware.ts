@@ -11,6 +11,19 @@ import type { Database } from "./types";
  * logged out after an hour of activity.
  */
 export async function updateSession(request: NextRequest) {
+  // If a magic-link URL lands on any page other than /auth/callback with
+  // token_hash + type query params, forward it to /auth/callback so it
+  // can be processed. This works around Supabase's email template rendering
+  // ignoring the path we configure in the template.
+  const url = new URL(request.url);
+  const hasOtpParams =
+    url.searchParams.get("token_hash") && url.searchParams.get("type");
+  if (hasOtpParams && url.pathname !== "/auth/callback") {
+    const callbackUrl = new URL("/auth/callback", url);
+    callbackUrl.search = url.search;
+    return NextResponse.redirect(callbackUrl);
+  }
+
   let response = NextResponse.next({
     request: { headers: request.headers },
   });
