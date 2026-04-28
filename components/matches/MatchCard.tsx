@@ -93,7 +93,7 @@ export default function MatchCard({
       {/* Mini court layout: serving team / score / net / score / receiving team */}
       <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl border-2 border-white/20 bg-[#0a2540] p-3">
         {/* Serving team */}
-        <div>
+        <div className="min-w-0">
           <div className="font-display text-[10px] uppercase font-bold tracking-widest text-pickle">
             Serving
           </div>
@@ -101,7 +101,7 @@ export default function MatchCard({
           <PlayerLine player={match.server_team_p2} />
         </div>
         {/* Center score */}
-        <div className="flex flex-col items-center gap-1 px-2">
+        <div className="flex shrink-0 flex-col items-center gap-1 px-2">
           <span
             className={`font-mono text-[28px] leading-none font-bold ${
               serverWon ? "text-pickle" : "text-white/60"
@@ -121,8 +121,8 @@ export default function MatchCard({
           </span>
         </div>
         {/* Receiving team */}
-        <div className="text-right">
-          <div className="font-display text-[10px] uppercase font-bold tracking-widest text-electric">
+        <div className="min-w-0">
+          <div className="text-right font-display text-[10px] uppercase font-bold tracking-widest text-electric">
             Receiving
           </div>
           <PlayerLine player={match.receiver_team_p1} align="right" />
@@ -168,31 +168,53 @@ function PlayerLine({
   align?: "left" | "right";
 }) {
   if (!player) {
-    return <div className={`text-sm text-white/30 ${align === "right" ? "text-right" : ""}`}>—</div>;
+    return (
+      <div
+        className={`mt-1 text-sm text-white/30 ${align === "right" ? "text-right" : ""}`}
+      >
+        —
+      </div>
+    );
   }
   return (
     <div
-      className={`mt-1 truncate text-sm text-white ${
-        align === "right" ? "text-right" : ""
+      className={`mt-1.5 flex min-w-0 items-center gap-1.5 ${
+        align === "right" ? "flex-row-reverse" : ""
       }`}
     >
-      {starServer && align !== "right" && (
-        <span className="mr-1 text-pickle" aria-label="server">
-          ★
-        </span>
-      )}
-      {player.display_name}
-      {player.is_guest && (
-        <span className="ml-1 text-[10px] uppercase tracking-wider text-bright">
-          guest
-        </span>
-      )}
-      {starServer && align === "right" && (
-        <span className="ml-1 text-pickle" aria-label="server">
-          ★
-        </span>
-      )}
+      <PlayerAvatar player={player} />
+      <span className="min-w-0 truncate text-sm text-white">
+        {starServer && (
+          <span className="mr-0.5 text-pickle" aria-label="server">
+            ★
+          </span>
+        )}
+        {player.display_name}
+      </span>
     </div>
+  );
+}
+
+/**
+ * Tiny avatar — colored circle with the player's initial.
+ * Real photo upload comes later; this is the visual anchor for now.
+ */
+function PlayerAvatar({
+  player,
+}: {
+  player: { display_name: string; is_guest: boolean };
+}) {
+  const initial = (player.display_name?.[0] ?? "?").toUpperCase();
+  const styles = player.is_guest
+    ? "border-bright text-bright"
+    : "border-pickle text-pickle";
+  return (
+    <span
+      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border bg-black font-mono text-[10px] font-bold ${styles}`}
+      aria-hidden
+    >
+      {initial}
+    </span>
   );
 }
 

@@ -21,6 +21,7 @@ interface USMapProps {
 export default function USMap({ onCitySelect }: USMapProps) {
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
   const [rawCities, setRawCities] = useState<CityNode[]>([]);
+  const [legendExpanded, setLegendExpanded] = useState(true);
 
   // Fetch live courts from Supabase on mount + every 30 seconds.
   useEffect(() => {
@@ -35,6 +36,12 @@ export default function USMap({ onCitySelect }: USMapProps) {
       alive = false;
       clearInterval(interval);
     };
+  }, []);
+
+  // Auto-collapse the legend after 4 seconds so it doesn't block the map on mobile
+  useEffect(() => {
+    const timer = setTimeout(() => setLegendExpanded(false), 4000);
+    return () => clearTimeout(timer);
   }, []);
 
   const cities = useMemo(
@@ -139,20 +146,41 @@ export default function USMap({ onCitySelect }: USMapProps) {
         </ZoomableGroup>
       </ComposableMap>
 
-      {/* Legend — middle-left, rounded panel with neon edge */}
-      <div className="absolute left-3 top-1/2 -translate-y-1/2 rounded-xl border-2 border-pickle bg-black/85 p-4 backdrop-blur-sm">
-        <div className="mb-3 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
-          Live Pulse
+      {/* Legend — auto-collapses to a small badge after a few seconds */}
+      {legendExpanded ? (
+        <div className="absolute left-3 top-1/2 -translate-y-1/2 rounded-xl border-2 border-pickle bg-black/85 p-4 backdrop-blur-sm">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
+              Live Pulse
+            </span>
+            <button
+              type="button"
+              onClick={() => setLegendExpanded(false)}
+              className="ml-2 text-base leading-none text-white/50 hover:text-pickle"
+              aria-label="Hide legend"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-white">
+            <span className="buzz-pickle inline-block h-3 w-3 rounded-full bg-pickle" />
+            <span>Active &lt; 60 min</span>
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 text-sm text-white">
+            <span className="inline-block h-3 w-3 rounded-full bg-bright" />
+            <span>Static</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-white">
+      ) : (
+        <button
+          type="button"
+          onClick={() => setLegendExpanded(true)}
+          className="absolute left-3 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full border-2 border-pickle bg-black/85 backdrop-blur-sm hover:border-bright"
+          aria-label="Show legend"
+        >
           <span className="buzz-pickle inline-block h-3 w-3 rounded-full bg-pickle" />
-          <span>Active &lt; 60 min</span>
-        </div>
-        <div className="mt-1.5 flex items-center gap-2 text-sm text-white">
-          <span className="inline-block h-3 w-3 rounded-full bg-bright" />
-          <span>Static</span>
-        </div>
-      </div>
+        </button>
+      )}
     </div>
   );
 }
