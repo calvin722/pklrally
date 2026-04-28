@@ -171,6 +171,50 @@ export async function disputeMatch(matchId: string, playerId: string) {
 }
 
 /**
+ * Logger-only: edit a disputed match's score and resubmit.
+ * Clears all existing vouches/disputes, flips status back to 'pending' so
+ * opponents can vouch again on the corrected score.
+ */
+export async function resubmitMatch(
+  matchId: string,
+  serverScore: number,
+  receiverScore: number,
+) {
+  const supabase = createClient();
+
+  // Wipe prior vouches/disputes — opponents need a clean slate to re-vote
+  const { error: delErr } = await supabase
+    .from("vouches")
+    .delete()
+    .eq("match_id", matchId);
+  if (delErr) throw new Error(delErr.message);
+
+  const { error } = await supabase
+    .from("matches")
+    .update({
+      server_score: serverScore,
+      receiver_score: receiverScore,
+      status: "pending",
+      vouched_at: null,
+    })
+    .eq("id", matchId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Logger-only: cancel a disputed match entirely (admin_deleted).
+ * No stats apply, match disappears from public timelines.
+ */
+export async function cancelMatch(matchId: string) {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("matches")
+    .update({ status: "admin_deleted" })
+    .eq("id", matchId);
+  if (error) throw new Error(error.message);
+}
+
+/**
  * Recent matches at any court in a city, for the local timeline.
  * Window defaults to last 7 days; tighten in UI if needed.
  */

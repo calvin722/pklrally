@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { vouchMatch, disputeMatch, type MatchSummary } from "@/lib/matches";
+import {
+  vouchMatch,
+  disputeMatch,
+  resubmitMatch,
+  cancelMatch,
+  type MatchSummary,
+} from "@/lib/matches";
 import Avatar from "@/components/Avatar";
 
 interface MatchCardProps {
@@ -30,6 +36,54 @@ export default function MatchCard({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Edit state — for the logger to fix a disputed match's score
+  const [editing, setEditing] = useState(false);
+  const [editServer, setEditServer] = useState(match.server_score);
+  const [editReceiver, setEditReceiver] = useState(match.receiver_score);
+
+  const viewerIsLogger = viewerPlayerId === match.logged_by;
+  const canEditDispute =
+    !compact && match.status === "disputed" && viewerIsLogger;
+
+  async function handleResubmit() {
+    if (editServer === editReceiver) {
+      setError("Scores can't be a tie.");
+      return;
+    }
+    if (editServer < 0 || editReceiver < 0) {
+      setError("Scores must be 0 or higher.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await resubmitMatch(match.id, editServer, editReceiver);
+      setEditing(false);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Resubmit failed.");
+      setBusy(false);
+    }
+  }
+
+  async function handleCancel() {
+    if (
+      !window.confirm(
+        "Cancel this match? It won't count toward anyone's stats and will disappear from public timelines.",
+      )
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      await cancelMatch(match.id);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Cancel failed.");
+      setBusy(false);
+    }
+  }
 
   // Likes state — fetched on mount, optimistic update on toggle
   const [likeCount, setLikeCount] = useState<number | null>(null);
@@ -194,6 +248,99 @@ export default function MatchCard({
           <PlayerLine player={match.receiver_team_p2} align="right" />
         </div>
       </div>
+
+      {/* Disputed match: logger-only edit + cancel actions */}
+      {canEditDispute && !editing && (
+        <div className="mt-4 rounded-xl border-2 border-electric/40 bg-electric/5 p-4">
+          <div className="font-display text-display-xs uppercase font-semibold tracking-wide text-electric">
+            ⚠ Match disputed by an opponent
+          </div>
+          <p className="mt-1 text-sm text-white/70 leading-relaxed">
+            Either fix the score and resubmit (opponents will re-vouch), or
+            cancel the match entirely.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-xl bg-pickle px-4 py-2 font-display text-display-xs font-extrabold uppercase tracking-wide text-black hover:bg-pickle-dim"
+            >
+              Edit score
+            </button>
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={busy}
+              className="rounded-xl border-2 border-bright px-4 py-2 font-display text-display-xs font-bold uppercase tracking-wide text-bright hover:bg-bright hover:text-black disabled:opacity-50"
+            >
+              Cancel match
+            </button>
+          </div>
+        </div>
+      )}
+
+      {canEditDispute && editing && (
+        <div className="mt-4 rounded-xl border-2 border-pickle bg-pickle/5 p-4">
+          <div className="font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
+            New score
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="font-display text-[10px] uppercase font-bold tracking-widest text-pickle">
+                Serving
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={99}
+                value={editServer}
+                onChange={(e) =>
+                  setEditServer(Math.max(0, parseInt(e.target.value, 10) || 0))
+                }
+                className="mt-1 w-full rounded-lg border-2 border-white bg-black px-3 py-2 text-center font-mono text-2xl text-pickle focus:border-pickle focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="font-display text-[10px] uppercase font-bold tracking-widest text-electric">
+                Receiving
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={99}
+                value={editReceiver}
+                onChange={(e) =>
+                  setEditReceiver(Math.max(0, parseInt(e.target.value, 10) || 0))
+                }
+                className="mt-1 w-full rounded-lg border-2 border-white bg-black px-3 py-2 text-center font-mono text-2xl text-electric focus:border-electric focus:outline-none"
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={handleResubmit}
+              disabled={busy}
+              className="soft-stamp rounded-xl bg-pickle px-4 py-2 font-display text-display-xs font-extrabold uppercase tracking-wide text-black disabled:opacity-50"
+            >
+              {busy ? "Saving..." : "Resubmit"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(false);
+                setEditServer(match.server_score);
+                setEditReceiver(match.receiver_score);
+                setError(null);
+              }}
+              disabled={busy}
+              className="rounded-xl border-2 border-white/40 px-4 py-2 font-display text-display-xs uppercase font-semibold tracking-wide text-white/70 hover:border-pickle hover:text-pickle disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Heart / like row — always visible */}
       <div className="mt-4 flex items-center justify-between gap-2">

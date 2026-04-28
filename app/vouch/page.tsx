@@ -45,7 +45,10 @@ export default async function VouchInboxPage() {
   if (!player) redirect("/login?next=/vouch");
 
   const supabase = await createClient();
-  const { data, error } = await supabase
+
+  // 1) Pending matches where the viewer is in any slot — to be filtered to
+  //    opposing-team-only afterward
+  const { data: pendingRows } = await supabase
     .from("matches")
     .select(SELECT_FULL)
     .eq("status", "pending")
@@ -60,23 +63,31 @@ export default async function VouchInboxPage() {
     .order("played_at", { ascending: false })
     .limit(50);
 
-  // Filter to opposing-team-only (logger and viewer on different sides)
-  const allMatches = (data ?? []).map(normalize);
-  const matches = allMatches.filter((m) => {
+  const pending = (pendingRows ?? []).map(normalize).filter((m) => {
     const loggerOnServing =
       m.logged_by === m.server_team_p1?.id ||
       m.logged_by === m.server_team_p2?.id;
-    const viewerOnReceiving =
+    const onReceiving =
       player.id === m.receiver_team_p1?.id ||
       player.id === m.receiver_team_p2?.id;
-    const viewerOnServing =
+    const onServing =
       player.id === m.server_team_p1?.id ||
       player.id === m.server_team_p2?.id;
     return (
-      (loggerOnServing && viewerOnReceiving) ||
-      (!loggerOnServing && viewerOnServing)
+      (loggerOnServing && onReceiving) || (!loggerOnServing && onServing)
     );
   });
+
+  // 2) Disputed matches the viewer logged — they need to fix or cancel
+  const { data: disputedRows } = await supabase
+    .from("matches")
+    .select(SELECT_FULL)
+    .eq("status", "disputed")
+    .eq("logged_by", player.id)
+    .order("played_at", { ascending: false })
+    .limit(50);
+
+  const disputed = (disputedRows ?? []).map(normalize);
 
   return (
     <main className="min-h-svh bg-black p-4 grid-bg">
@@ -95,35 +106,61 @@ export default async function VouchInboxPage() {
         </Link>
       </header>
 
-      <div className="mx-auto mt-8 max-w-2xl">
-        <h1 className="font-display text-display-2xl font-extrabold text-bright">
-          Vouch inbox
-        </h1>
-        <p className="mt-2 text-base text-white/60">
-          Confirm or dispute matches your opponents have logged.
-        </p>
+      <div className="mx-auto mt-8 max-w-2xl space-y-10">
+        <div>
+          <h1 className="font-display text-display-2xl font-extrabold text-bright">
+            Vouch inbox
+          </h1>
+          <p className="mt-2 text-base text-white/60">
+            Confirm or dispute matches your opponents have logged.
+          </p>
+        </div>
 
-        {error && (
-          <p className="mt-4 text-base text-bright">⚠ {error.message}</p>
+        {/* Disputed matches the viewer logged — needs their action */}
+        {disputed.length > 0 && (
+          <section>
+            <h2 className="font-display text-display-xs uppercase font-semibold tracking-wide text-electric">
+              Needs your action ({disputed.length})
+            </h2>
+            <p className="mt-1 text-sm text-white/50">
+              Matches you logged that an opponent disputed. Fix the score and
+              resubmit, or cancel the match.
+            </p>
+            <div className="mt-4 space-y-4">
+              {disputed.map((m) => (
+                <MatchCard key={m.id} match={m} viewerPlayerId={player.id} />
+              ))}
+            </div>
+          </section>
         )}
 
-        <div className="mt-8 space-y-4">
-          {matches.length === 0 ? (
-            <div className="rounded-2xl border-2 border-white/20 p-8 text-center">
-              <p className="font-display text-display-base font-bold text-white/70">
-                Nothing pending
-              </p>
-              <p className="mt-2 text-sm text-white/40">
-                When an opponent logs a match you played in, it'll show up here
-                for you to vouch.
-              </p>
-            </div>
-          ) : (
-            matches.map((m) => (
-              <MatchCard key={m.id} match={m} viewerPlayerId={player.id} />
-            ))
-          )}
-        </div>
+        {/* Pending matches awaiting your vouch */}
+        <section>
+          <h2 className="font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
+            Awaiting your vouch ({pending.length})
+          </h2>
+          <p className="mt-1 text-sm text-white/50">
+            Matches your opponents logged. Confirm if the score is right,
+            dispute if it's not.
+          </p>
+          <div className="mt-4 space-y-4">
+            {pending.length === 0 && disputed.length === 0 ? (
+              <div className="rounded-2xl border-2 border-white/20 p-8 text-center">
+                <p className="font-display text-display-base font-bold text-white/70">
+                  Nothing pending
+                </p>
+                <p className="mt-2 text-sm text-white/40">
+                  When an opponent logs a match you played in, it'll show up
+                  here for you to vouch.
+                </p>
+              </div>
+            ) : (
+              pending.map((m) => (
+                <MatchCard key={m.id} match={m} viewerPlayerId={player.id} />
+              ))
+            )}
+          </div>
+        </section>
       </div>
     </main>
   );
