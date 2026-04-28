@@ -174,20 +174,12 @@ export default function USMap({ onCitySelect }: USMapProps) {
             </button>
           </div>
           <div className="flex items-center gap-2 text-sm text-white">
-            <span className="buzz-pickle inline-block h-3 w-3 rounded-full bg-pickle" />
-            <span>Public · active</span>
-          </div>
-          <div className="mt-1.5 flex items-center gap-2 text-sm text-white">
             <span className="inline-block h-3 w-3 rounded-full bg-pickle" />
-            <span>Public · static</span>
-          </div>
-          <div className="mt-1.5 flex items-center gap-2 text-sm text-white">
-            <span className="buzz-electric inline-block h-3 w-3 rounded-full bg-electric" />
-            <span>Private · active</span>
+            <span>Public courts</span>
           </div>
           <div className="mt-1.5 flex items-center gap-2 text-sm text-white">
             <span className="inline-block h-3 w-3 rounded-full bg-electric" />
-            <span>Private · static</span>
+            <span>Private courts</span>
           </div>
         </div>
       ) : (
