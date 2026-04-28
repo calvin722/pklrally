@@ -12,6 +12,48 @@ interface PlayerLite {
   avatar_url: string | null;
 }
 
+/**
+ * Read auth user id directly from the Supabase session cookie.
+ * Used as a fallback when supabase.auth.getUser() hangs (rare but happens).
+ * The @supabase/ssr browser client stores the full session as JSON in the
+ * cookie value (optionally base64-prefixed and chunked across .0/.1/.2 cookies).
+ */
+function readUserIdFromCookie(): string | null {
+  if (typeof document === "undefined") return null;
+
+  // Find all sb-*-auth-token (and chunks) cookies, sort by chunk index, join.
+  const cookies = document.cookie.split(";").map((c) => c.trim());
+  const authBase = cookies.find(
+    (c) => /^sb-[^=]+-auth-token=/.test(c) && !/-auth-token\.\d+=/.test(c),
+  );
+  const authChunks = cookies
+    .filter((c) => /^sb-[^=]+-auth-token\.\d+=/.test(c))
+    .sort((a, b) => {
+      const ai = parseInt(a.match(/-auth-token\.(\d+)=/)?.[1] ?? "0", 10);
+      const bi = parseInt(b.match(/-auth-token\.(\d+)=/)?.[1] ?? "0", 10);
+      return ai - bi;
+    });
+
+  let raw = "";
+  if (authBase) {
+    raw = authBase.split("=").slice(1).join("=");
+  } else if (authChunks.length) {
+    raw = authChunks.map((c) => c.split("=").slice(1).join("=")).join("");
+  }
+  if (!raw) return null;
+
+  try {
+    const decoded = decodeURIComponent(raw);
+    const json = decoded.startsWith("base64-")
+      ? atob(decoded.slice(7))
+      : decoded;
+    const session = JSON.parse(json);
+    return session?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default function AuthButton() {
   const [player, setPlayer] = useState<PlayerLite | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,12 +66,24 @@ export default function AuthButton() {
 
     async function load() {
       try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        // Step 1: figure out the signed-in user's auth UUID.
+        // We try supabase.auth.getUser() first, but race it against a 2-second
+        // timeout AND a fallback that reads the user out of the auth cookie
+        // directly. supabase-js's auth path can hang on some browser
+        // contexts (navigator.locks bugs, crashed prior tabs holding a lock,
+        // etc.) — the cookie fallback gets us unstuck.
+        const userId = await Promise.race([
+          supabase.auth
+            .getUser()
+            .then((r) => r.data.user?.id ?? null)
+            .catch(() => null),
+          new Promise<string | null>((resolve) =>
+            setTimeout(() => resolve(readUserIdFromCookie()), 2000),
+          ),
+        ]);
         if (!mounted) return;
 
-        if (!user) {
+        if (!userId) {
           setPlayer(null);
           setLoading(false);
           return;
@@ -38,7 +92,7 @@ export default function AuthButton() {
         const { data, error } = await supabase
           .from("players")
           .select("id, display_name, is_admin, avatar_url")
-          .eq("auth_user_id", user.id)
+          .eq("auth_user_id", userId)
           .maybeSingle();
 
         if (!mounted) return;
