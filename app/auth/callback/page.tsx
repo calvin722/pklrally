@@ -88,8 +88,37 @@ export default function AuthCallbackPage() {
       return fail("missing_auth_params");
     }
 
-    function win(next: string) {
+    async function win(next: string) {
       if (cancelled) return;
+
+      // Run post-sign-in housekeeping:
+      //   - Auto-restore "take a break" accounts
+      //   - Detect a fresh guest claim (claimed_at within 5 min)
+      //   - Count pending vouches
+      try {
+        const { data: checkRows } = await supabase.rpc("post_sign_in_check");
+        const check = Array.isArray(checkRows) ? checkRows[0] : checkRows;
+        const wasJustClaimed = check?.was_just_claimed === true;
+        const pendingVouches = Number(check?.pending_vouches ?? 0);
+
+        // Fire the welcome-vouch email once on first claim
+        if (wasJustClaimed && pendingVouches > 0) {
+          // Don't await — fire and forget, no need to block redirect
+          fetch("/api/welcome-vouch", { method: "POST" }).catch(() => {});
+        }
+
+        // Route to /vouch if there are pending matches AND we just claimed,
+        // so the new user lands directly on their inbox.
+        if (wasJustClaimed && pendingVouches > 0) {
+          router.replace("/vouch?welcome=1");
+          router.refresh();
+          return;
+        }
+      } catch (e) {
+        // Non-fatal — fall through to default routing
+        console.warn("post_sign_in_check failed:", e);
+      }
+
       // Clear the hash from the URL before navigating
       router.replace(next);
       router.refresh();
