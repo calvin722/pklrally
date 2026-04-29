@@ -35,6 +35,8 @@ export type Database = {
           losses: number;
           points_scored: number;
           points_against: number;
+          theme: "light" | "dark";
+          deleted_at: string | null;
           created_at: string;
           updated_at: string;
         };

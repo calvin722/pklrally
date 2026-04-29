@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Manrope, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import ThemeProvider from "@/components/ThemeProvider";
+import { getCurrentPlayer } from "@/lib/supabase/getCurrentPlayer";
 
 /**
  * Typography stack — modern, smooth, friendly.
@@ -46,18 +48,26 @@ export const viewport: Viewport = {
   themeColor: "#000000",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Server-side fetch of the player's theme so first paint is correct.
+  // Falls back to "dark" if not signed in or if the column is missing.
+  const player = await getCurrentPlayer().catch(() => null);
+  const initialTheme: "light" | "dark" = player?.theme === "light" ? "light" : "dark";
+
   return (
     <html
       lang="en"
+      data-theme={initialTheme}
       className={`${inter.variable} ${manrope.variable} ${jetbrains.variable}`}
     >
       <body className="min-h-screen bg-black font-sans text-white antialiased">
-        {children}
+        <ThemeProvider initialTheme={initialTheme} playerId={player?.id ?? null}>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
