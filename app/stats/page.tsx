@@ -110,6 +110,17 @@ export default async function StatsPage() {
       ? Math.round((player.wins / player.matches_played) * 100)
       : null;
 
+  const avgPoints =
+    player.matches_played > 0
+      ? (player.points_scored / player.matches_played).toFixed(1)
+      : "—";
+
+  // "April 2026"
+  const monthLabel = new Date().toLocaleString("default", {
+    month: "long",
+    year: "numeric",
+  });
+
   return (
     <main className="min-h-svh bg-black p-4 grid-bg">
       <header className="mx-auto flex max-w-3xl items-center justify-between">
@@ -160,16 +171,17 @@ export default async function StatsPage() {
               value={winRate !== null ? `${winRate}%` : "—"}
             />
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Stat label="Points scored" value={player.points_scored} />
             <Stat label="Points against" value={player.points_against} />
+            <Stat label="Avg points / game" value={avgPoints} />
           </div>
         </section>
 
         {/* This month */}
         <section className="rounded-2xl border-2 border-white/30 bg-black p-6">
           <h2 className="font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
-            This month
+            This month — {monthLabel}
           </h2>
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Stat label="Matches" value={thisMonth.length} />
@@ -221,33 +233,43 @@ export default async function StatsPage() {
           </div>
         </section>
 
-        {/* Recent matches */}
+        {/* Recent matches — first expanded, rest collapsed to one-liners */}
         <section>
           <h2 className="font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
             Recent matches
           </h2>
-          <div className="mt-4 space-y-4">
-            {recent.length === 0 ? (
-              <div className="rounded-2xl border-2 border-white/20 p-8 text-center">
-                <p className="font-display text-display-base font-bold text-white/70">
-                  No vouched matches yet
-                </p>
-                <p className="mt-2 text-sm text-white/40">
-                  Log a match from the homepage and have an opponent vouch it,
-                  and it'll show up here.
-                </p>
-              </div>
-            ) : (
-              recent.map((m) => (
+          {recent.length === 0 ? (
+            <div className="mt-4 rounded-2xl border-2 border-white/20 p-8 text-center">
+              <p className="font-display text-display-base font-bold text-white/70">
+                No vouched matches yet
+              </p>
+              <p className="mt-2 text-sm text-white/40">
+                Log a match from the homepage and have an opponent vouch it,
+                and it'll show up here.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="mt-4">
                 <MatchCard
-                  key={m.id}
-                  match={m}
+                  match={recent[0]}
                   viewerPlayerId={player.id}
                   compact
                 />
-              ))
-            )}
-          </div>
+              </div>
+              {recent.length > 1 && (
+                <ul className="mt-3 divide-y divide-white/10 overflow-hidden rounded-xl border-2 border-white/20">
+                  {recent.slice(1).map((m) => (
+                    <CompactMatchRow
+                      key={m.id}
+                      match={m}
+                      viewerWon={viewerWon(m, player.id)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
         </section>
       </div>
     </main>
@@ -294,5 +316,47 @@ function RankPlaceholder({ label }: { label: string }) {
         Coming soon
       </div>
     </div>
+  );
+}
+
+function CompactMatchRow({
+  match,
+  viewerWon,
+}: {
+  match: MatchSummary;
+  viewerWon: boolean;
+}) {
+  const date = new Date(match.played_at);
+  const dateStr = date.toLocaleDateString("default", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  const timeStr = date.toLocaleTimeString("default", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return (
+    <li className="flex items-center gap-3 px-4 py-3 transition hover:bg-white/[0.03]">
+      <span
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-display text-xs font-extrabold ${
+          viewerWon ? "bg-pickle text-black" : "bg-bright text-black"
+        }`}
+        aria-label={viewerWon ? "Win" : "Loss"}
+      >
+        {viewerWon ? "W" : "L"}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-sans text-sm text-white">
+          {match.court?.name ?? "Unknown court"}
+        </div>
+        <div className="text-xs text-white/50">
+          {dateStr} · {timeStr}
+        </div>
+      </div>
+      <div className="shrink-0 font-mono text-sm text-white/70">
+        {match.server_score} – {match.receiver_score}
+      </div>
+    </li>
   );
 }
