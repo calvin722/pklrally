@@ -63,6 +63,7 @@ export interface LadderRow {
   matches_played: number;
   wins: number;
   losses: number;
+  weighted_wins: number; // sum of match_value for each win (0.5..1.5 per win)
   win_rate: number; // 0..1
   score: number;
   rank: number;

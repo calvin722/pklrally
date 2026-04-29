@@ -229,33 +229,85 @@ export default async function CityLadderPage({
         <h2 className="font-display text-display-sm font-extrabold uppercase tracking-wide text-pickle">
           How the ranking works
         </h2>
-        <p className="mt-3 text-sm leading-relaxed text-white/80">
-          Every player&apos;s monthly score is calculated as:
-        </p>
-        <div className="mt-3 rounded-xl border-2 border-pickle bg-black p-4 text-center">
+
+        <div className="mt-4 rounded-xl border-2 border-pickle bg-black p-4 text-center">
           <p className="font-mono text-base text-bright sm:text-lg">
-            score = wins × win&nbsp;rate
+            score = weighted&nbsp;wins × win&nbsp;rate
           </p>
           <p className="mt-1 font-mono text-xs text-white/60">
-            (win rate = wins ÷ matches played)
+            weighted wins = sum of each win, weighted by team rating gap
           </p>
         </div>
+
         <p className="mt-4 text-sm leading-relaxed text-white/80">
-          This rewards both <span className="text-pickle">winning a lot</span>{" "}
-          and <span className="text-pickle">winning consistently</span>. You
-          can&apos;t climb just by playing 50 matches and going 26–24 — your low
-          win rate kills your score. And you can&apos;t climb on a hot 3–0 week
-          either, because three wins is just three wins.
+          Each match&apos;s win is worth{" "}
+          <span className="text-pickle">more or less</span> depending on how
+          the two teams compared. We average each team&apos;s self-ratings and
+          look at the gap. Beating a team rated higher than yours earns a{" "}
+          <span className="text-pickle">bonus</span>. Beating a team rated
+          lower earns a <span className="text-bright">discount</span>. The
+          weight is capped between <span className="font-mono">0.5×</span> and{" "}
+          <span className="font-mono">1.5×</span> so one match can&apos;t
+          break a month.
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <ExampleCard label="Casual" line1="6 W / 12 played" line2="50% win rate" line3="6 × 0.50 = 3.00" />
-          <ExampleCard label="Sharp" line1="9 W / 12 played" line2="75% win rate" line3="9 × 0.75 = 6.75" highlight />
-          <ExampleCard label="Volume only" line1="20 W / 40 played" line2="50% win rate" line3="20 × 0.50 = 10.00" />
+        <p className="mt-3 text-sm leading-relaxed text-white/80">
+          This is designed to close two gaps in a simple wins-based ranking:
+        </p>
+        <ul className="mt-2 space-y-1.5 pl-1 text-sm leading-relaxed text-white/80">
+          <li>
+            <span className="font-display text-pickle">Volume alone</span> won&apos;t
+            carry you — the win-rate term means a 30–20 month earns about the
+            same score as a 12–4 month.
+          </li>
+          <li>
+            <span className="font-display text-pickle">Lower-rated opponents</span>{" "}
+            won&apos;t carry you — those wins are discounted, so beating up on
+            3.0s when you&apos;re a 4.0 quietly counts less.
+          </li>
+          <li>
+            <span className="font-display text-pickle">Doubles is a team game</span>{" "}
+            — both partners get the same multiplier, based on team-average vs.
+            team-average. A 4.0 + 3.0 partnership is treated as a 3.5 team.
+          </li>
+        </ul>
+
+        <p className="mt-5 font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
+          Worked examples
+        </p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <MatchExample
+            scenario="Two 3.5s beat two 3.5s, 11–9"
+            teams="Team avg 3.5 vs 3.5 → gap 0"
+            value="1.00"
+            tone="even"
+          />
+          <MatchExample
+            scenario="Two 4.0s beat two 3.5s, 11–7"
+            teams="Team avg 4.0 vs 3.5 → gap −0.5"
+            value="0.85"
+            tone="discount"
+          />
+          <MatchExample
+            scenario="Two 4.0s beat two 3.0s, 11–4"
+            teams="Team avg 4.0 vs 3.0 → gap −1.0"
+            value="0.70"
+            tone="discount"
+          />
+          <MatchExample
+            scenario="A 3.0 + 3.5 team beats a 4.0 + 4.5 team, 11–9"
+            teams="Team avg 3.25 vs 4.25 → gap +1.0"
+            value="1.30"
+            tone="bonus"
+          />
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-white/50">
-          Only <span className="text-pickle">vouched</span> matches count. Guest
-          players don&apos;t appear on the ladder until they claim their account.
-          Ties are broken by total wins, then matches played.
+
+        <p className="mt-4 text-xs leading-relaxed text-white/50">
+          Only <span className="text-pickle">vouched</span> matches count.
+          Guests don&apos;t appear on the ladder until they claim their
+          account. Score margins (11–7 vs. 11–9) don&apos;t change a
+          match&apos;s weight — only the rating gap does. Unrated players
+          default to 3.5 for these calculations. Ties broken by weighted wins,
+          then total wins, then matches played.
         </p>
       </section>
 
@@ -332,42 +384,55 @@ function PrizeCard({
   );
 }
 
-function ExampleCard({
-  label,
-  line1,
-  line2,
-  line3,
-  highlight,
+function MatchExample({
+  scenario,
+  teams,
+  value,
+  tone,
 }: {
-  label: string;
-  line1: string;
-  line2: string;
-  line3: string;
-  highlight?: boolean;
+  scenario: string;
+  teams: string;
+  value: string;
+  tone: "even" | "discount" | "bonus";
 }) {
+  const styles = {
+    even: {
+      border: "border-white/25",
+      bg: "bg-black/40",
+      label: "text-white/60",
+      labelText: "Even matchup",
+      valueColor: "text-white",
+    },
+    discount: {
+      border: "border-bright/40",
+      bg: "bg-bright/5",
+      label: "text-bright",
+      labelText: "Discounted",
+      valueColor: "text-bright",
+    },
+    bonus: {
+      border: "border-pickle",
+      bg: "bg-pickle/10",
+      label: "text-pickle",
+      labelText: "Bonus (upset)",
+      valueColor: "text-pickle",
+    },
+  }[tone];
+
   return (
-    <div
-      className={`rounded-xl border-2 p-3 ${
-        highlight
-          ? "border-pickle bg-pickle/10"
-          : "border-white/15 bg-black/40"
-      }`}
-    >
+    <div className={`rounded-xl border-2 p-3 ${styles.border} ${styles.bg}`}>
       <p
-        className={`font-display text-[10px] uppercase font-bold tracking-widest ${
-          highlight ? "text-pickle" : "text-white/50"
-        }`}
+        className={`font-display text-[10px] uppercase font-bold tracking-widest ${styles.label}`}
       >
-        {label}
+        {styles.labelText}
       </p>
-      <p className="mt-1 font-mono text-xs text-white/80">{line1}</p>
-      <p className="font-mono text-xs text-white/80">{line2}</p>
-      <p
-        className={`mt-2 font-mono text-sm font-bold ${
-          highlight ? "text-bright" : "text-white"
-        }`}
-      >
-        {line3}
+      <p className="mt-1 text-sm leading-snug text-white">{scenario}</p>
+      <p className="mt-1 font-mono text-xs text-white/60">{teams}</p>
+      <p className="mt-2 font-mono text-xs text-white/50">
+        win counts as{" "}
+        <span className={`text-base font-bold ${styles.valueColor}`}>
+          {value}
+        </span>
       </p>
     </div>
   );
