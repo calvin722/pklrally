@@ -100,6 +100,35 @@
   }
 }
 
+/* -------------------------------------------------------------
+   Admin form input — used in admin panels (sponsorships, etc.)
+   ------------------------------------------------------------- */
+.input {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  color: #ffffff;
+  font-size: 0.875rem;
+  text-transform: none;
+  letter-spacing: normal;
+  outline: none;
+  transition: border-color 100ms ease, background-color 100ms ease;
+  width: 100%;
+}
+.input:focus {
+  border-color: #99ff00;
+  background-color: rgba(153, 255, 0, 0.05);
+}
+.input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+/* Style native select dropdown options to match dark theme */
+.input option {
+  background-color: #000000;
+  color: #ffffff;
+}
+
 /* Electric blue version of the buzz keyframe (for private courts later) */
 @keyframes buzz-electric {
   0%,

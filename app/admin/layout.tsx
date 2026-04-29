@@ -33,6 +33,7 @@ export default async function AdminLayout({
           <NavLink href="/admin/players">Players</NavLink>
           <NavLink href="/admin/matches">Matches</NavLink>
           <NavLink href="/admin/invites">Invites</NavLink>
+          <NavLink href="/admin/sponsorships">Sponsorships</NavLink>
         </nav>
 
         <div className="mt-12 border-t-2 border-white/20 pt-4">
