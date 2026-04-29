@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 interface ThemeProviderProps {
@@ -67,4 +67,41 @@ export function setTheme(theme: "light" | "dark") {
   window.dispatchEvent(
     new CustomEvent("pklrally-theme-change", { detail: { theme } }),
   );
+}
+
+/**
+ * useTheme — reactive hook for components that need to swap inline
+ * styles or SVG attributes based on the current theme. CSS overlays
+ * handle most cases, but inline fills (e.g. SVG <Geography fill>) can't
+ * be reached by CSS, so they read from this hook instead.
+ */
+export function useTheme(): "light" | "dark" {
+  const [theme, setLocal] = useState<"light" | "dark">("dark");
+
+  useEffect(() => {
+    function read(): "light" | "dark" {
+      if (typeof document === "undefined") return "dark";
+      return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+    }
+    setLocal(read());
+
+    const observer = new MutationObserver(() => setLocal(read()));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+
+    function onCustomEvent(e: Event) {
+      const detail = (e as CustomEvent<{ theme: "light" | "dark" }>).detail;
+      if (detail?.theme) setLocal(detail.theme);
+    }
+    window.addEventListener("pklrally-theme-change", onCustomEvent);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("pklrally-theme-change", onCustomEvent);
+    };
+  }, []);
+
+  return theme;
 }

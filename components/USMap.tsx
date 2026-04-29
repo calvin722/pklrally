@@ -10,6 +10,7 @@ import {
 } from "react-simple-maps";
 import { fetchCityNodes, isCityBuzzing } from "@/lib/courts";
 import type { CityNode } from "@/lib/types";
+import { useTheme } from "@/components/ThemeProvider";
 
 const US_TOPO_URL =
   "https://cdn.jsdelivr.net/npm/us-atlas@3.0.1/states-10m.json";
@@ -22,6 +23,34 @@ export default function USMap({ onCitySelect }: USMapProps) {
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
   const [rawCities, setRawCities] = useState<CityNode[]>([]);
   const [legendExpanded, setLegendExpanded] = useState(true);
+  const theme = useTheme();
+  const isLight = theme === "light";
+
+  // Theme-aware map colors. CSS can't reach inline SVG attributes, so we
+  // swap them here based on the current data-theme.
+  const mapColors = isLight
+    ? {
+        canvasBg: "bg-[#FAFAF7] grid-bg",
+        stateFill: "#FFFFFF",
+        stateStroke: "#5C9900",
+        stateHover: "#F0FCD3",
+        publicDot: "#5C9900",
+        privateDot: "#0072B5",
+        dotStroke: "#FFFFFF",
+        labelFill: "#18181b",
+        labelStroke: "#FFFFFF",
+      }
+    : {
+        canvasBg: "bg-black grid-bg",
+        stateFill: "#000000",
+        stateStroke: "#5C9900",
+        stateHover: "#0a1a00",
+        publicDot: "#99FF00",
+        privateDot: "#00BFFF",
+        dotStroke: "#000000",
+        labelFill: "#FFFFFF",
+        labelStroke: "#000000",
+      };
 
   // Fetch live courts from Supabase on mount + every 30 seconds.
   useEffect(() => {
@@ -50,7 +79,7 @@ export default function USMap({ onCitySelect }: USMapProps) {
   );
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-black grid-bg">
+    <div className={`relative h-full w-full overflow-hidden ${mapColors.canvasBg}`}>
       <ComposableMap
         projection="geoAlbersUsa"
         projectionConfig={{ scale: 1000 }}
@@ -74,13 +103,13 @@ export default function USMap({ onCitySelect }: USMapProps) {
                 <Geography
                   key={geo.rsmKey}
                   geography={geo}
-                  fill="#000000"
-                  stroke="#5C9900"
+                  fill={mapColors.stateFill}
+                  stroke={mapColors.stateStroke}
                   strokeWidth={0.6}
                   style={{
                     default: { outline: "none" },
-                    hover: { outline: "none", fill: "#0a1a00" },
-                    pressed: { outline: "none", fill: "#0a1a00" },
+                    hover: { outline: "none", fill: mapColors.stateHover },
+                    pressed: { outline: "none", fill: mapColors.stateHover },
                   }}
                 />
               ))
@@ -101,7 +130,7 @@ export default function USMap({ onCitySelect }: USMapProps) {
                 ? "buzz-electric"
                 : "buzz-pickle"
               : "";
-            const dotFill = isPrivate ? "#00BFFF" : "#99FF00";
+            const dotFill = isPrivate ? mapColors.privateDot : mapColors.publicDot;
 
             return (
               <Marker
@@ -127,7 +156,7 @@ export default function USMap({ onCitySelect }: USMapProps) {
                   <circle
                     r={r}
                     fill={dotFill}
-                    stroke="#000000"
+                    stroke={mapColors.dotStroke}
                     strokeWidth={1}
                   />
                 </g>
@@ -137,13 +166,13 @@ export default function USMap({ onCitySelect }: USMapProps) {
                     x={r + 5}
                     y={4}
                     textAnchor="start"
-                    fill="#FFFFFF"
+                    fill={mapColors.labelFill}
                     style={{
                       fontFamily: "var(--font-display), system-ui, sans-serif",
                       fontWeight: 700,
                       fontSize: 13,
                       paintOrder: "stroke",
-                      stroke: "#000000",
+                      stroke: mapColors.labelStroke,
                       strokeWidth: 3,
                       strokeLinejoin: "round",
                     }}
@@ -159,7 +188,7 @@ export default function USMap({ onCitySelect }: USMapProps) {
 
       {/* Legend — auto-collapses to a small badge after a few seconds */}
       {legendExpanded ? (
-        <div className="absolute left-3 top-1/2 -translate-y-1/2 rounded-xl border-2 border-pickle bg-black/85 p-4 backdrop-blur-sm">
+        <div className={`absolute left-3 top-1/2 -translate-y-1/2 rounded-xl border-2 border-pickle ${isLight ? "bg-white/90" : "bg-black/85"} p-4 backdrop-blur-sm`}>
           <div className="mb-3 flex items-center justify-between gap-3">
             <span className="font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
               Live Pulse
@@ -186,7 +215,7 @@ export default function USMap({ onCitySelect }: USMapProps) {
         <button
           type="button"
           onClick={() => setLegendExpanded(true)}
-          className="absolute left-3 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full border-2 border-pickle bg-black/85 backdrop-blur-sm hover:border-bright"
+          className={`absolute left-3 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full border-2 border-pickle ${isLight ? "bg-white/90" : "bg-black/85"} backdrop-blur-sm hover:border-bright`}
           aria-label="Show legend"
         >
           <span className="buzz-pickle inline-block h-3 w-3 rounded-full bg-pickle" />

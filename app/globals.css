@@ -104,76 +104,143 @@
    LIGHT MODE — attribute-selector overlay
    =============================================================
    The site defaults to dark. When [data-theme="light"] is set on
-   <html>, these rules invert the most-used utilities into light
-   equivalents while preserving the neon accents in slightly darker
-   tones for readability on white.
+   <html>, these rules map every dark-utility to a corresponding
+   light value chosen specifically for the PKLRALLY palette.
 
-   Admin pages opt OUT (always dark) by setting [data-admin] on the
-   shell — see app/admin/layout.tsx.
+   Color philosophy:
+     Canvas   #FAFAF7 (warm off-white, hint of pickleball green)
+     Text     zinc-900 / zinc-700 / zinc-500 / zinc-400 scale
+     Pickle   text → #3F7300 (deep pickleball green, AAA on white)
+              fill → #99FF00 stays (great brand splash on white)
+     Bright   text → #A66200 (warm amber, friendly + readable)
+              fill → #FFD93D (softened sunshine yellow)
+     Electric text → #0072B5 (deeper blue for legibility)
+              fill → #00BFFF stays
    ============================================================= */
 
 [data-theme="light"] body {
-  background: #ffffff;
+  background: #FAFAF7;
   color: #18181b;
 }
 
-/* Selection highlight — keep bright but on light bg use darker text */
+/* Selection — keep brand pickle splash, dark text for contrast */
 [data-theme="light"] ::selection {
   background: #99ff00;
-  color: #000000;
+  color: #18181b;
 }
 
-/* Backgrounds */
-[data-theme="light"] .bg-black { background-color: #ffffff; }
-[data-theme="light"] .bg-white\/5,
+/* -------------------------------------------------------------
+   Backgrounds
+   ------------------------------------------------------------- */
+[data-theme="light"] .bg-black { background-color: #FAFAF7; }
+
+/* "Subtle card" surfaces — bumped above the canvas with pure white */
 [data-theme="light"] .bg-white\/\[0\.02\],
 [data-theme="light"] .bg-white\/\[0\.03\],
-[data-theme="light"] .bg-white\/\[0\.05\] { background-color: rgba(0, 0, 0, 0.04); }
-[data-theme="light"] .bg-white\/10 { background-color: rgba(0, 0, 0, 0.06); }
+[data-theme="light"] .bg-white\/\[0\.05\],
+[data-theme="light"] .bg-white\/5 { background-color: #FFFFFF; }
 
-/* Text — invert white scale to a zinc-dark scale */
+[data-theme="light"] .bg-white\/10 { background-color: rgba(0, 0, 0, 0.04); }
+[data-theme="light"] .bg-white\/20 { background-color: rgba(0, 0, 0, 0.08); }
+
+/* Tinted backgrounds */
+[data-theme="light"] .bg-pickle\/5 { background-color: rgba(63, 115, 0, 0.08); }
+[data-theme="light"] .bg-pickle\/10 { background-color: rgba(63, 115, 0, 0.12); }
+[data-theme="light"] .bg-pickle\/20 { background-color: rgba(63, 115, 0, 0.18); }
+[data-theme="light"] .bg-bright\/5 { background-color: rgba(255, 217, 61, 0.18); }
+[data-theme="light"] .bg-bright\/10 { background-color: rgba(255, 217, 61, 0.28); }
+[data-theme="light"] .bg-electric\/10 { background-color: rgba(0, 114, 181, 0.1); }
+[data-theme="light"] .bg-electric\/20 { background-color: rgba(0, 114, 181, 0.18); }
+
+/* Pure pickle/bright/electric fills — keep on light mode (good brand splash) */
+/* No override needed — bg-pickle stays #99FF00, etc. */
+
+/* -------------------------------------------------------------
+   Text — invert white-opacity scale to a zinc-dark scale
+   ------------------------------------------------------------- */
 [data-theme="light"] .text-white { color: #18181b; }
 [data-theme="light"] .text-white\/90 { color: rgba(24, 24, 27, 0.9); }
-[data-theme="light"] .text-white\/80 { color: rgba(24, 24, 27, 0.85); }
-[data-theme="light"] .text-white\/70 { color: rgba(24, 24, 27, 0.75); }
-[data-theme="light"] .text-white\/60 { color: rgba(24, 24, 27, 0.65); }
-[data-theme="light"] .text-white\/50 { color: rgba(24, 24, 27, 0.55); }
-[data-theme="light"] .text-white\/40 { color: rgba(24, 24, 27, 0.45); }
-[data-theme="light"] .text-white\/30 { color: rgba(24, 24, 27, 0.35); }
-[data-theme="light"] .text-white\/20 { color: rgba(24, 24, 27, 0.25); }
+[data-theme="light"] .text-white\/80 { color: rgba(24, 24, 27, 0.82); }
+[data-theme="light"] .text-white\/70 { color: rgba(24, 24, 27, 0.7); }
+[data-theme="light"] .text-white\/60 { color: rgba(82, 82, 91, 1); }   /* zinc-600 */
+[data-theme="light"] .text-white\/50 { color: rgba(113, 113, 122, 1); }/* zinc-500 */
+[data-theme="light"] .text-white\/40 { color: rgba(161, 161, 170, 1); }/* zinc-400 */
+[data-theme="light"] .text-white\/30 { color: rgba(212, 212, 216, 1); }/* zinc-300 */
+[data-theme="light"] .text-white\/20 { color: rgba(228, 228, 231, 1); }/* zinc-200 */
 
-/* Borders — flip white-opacity borders to zinc-opacity borders */
+/* Pickle text — deeper green that's AAA-readable on white */
+[data-theme="light"] .text-pickle { color: #3F7300; }
+[data-theme="light"] .text-pickle\/80 { color: rgba(63, 115, 0, 0.85); }
+[data-theme="light"] .text-pickle\/60 { color: rgba(63, 115, 0, 0.7); }
+
+/* Bright (yellow) — warm amber for legibility on white */
+[data-theme="light"] .text-bright { color: #A66200; }
+[data-theme="light"] .text-bright\/80 { color: rgba(166, 98, 0, 0.85); }
+
+/* Electric (blue) — slightly deeper blue for AA contrast */
+[data-theme="light"] .text-electric { color: #0072B5; }
+
+/* -------------------------------------------------------------
+   Borders — invert white-opacity to zinc-opacity
+   ------------------------------------------------------------- */
 [data-theme="light"] .border-white { border-color: #18181b; }
-[data-theme="light"] .border-white\/10 { border-color: rgba(0, 0, 0, 0.1); }
-[data-theme="light"] .border-white\/15 { border-color: rgba(0, 0, 0, 0.12); }
-[data-theme="light"] .border-white\/20 { border-color: rgba(0, 0, 0, 0.14); }
-[data-theme="light"] .border-white\/25 { border-color: rgba(0, 0, 0, 0.18); }
-[data-theme="light"] .border-white\/30 { border-color: rgba(0, 0, 0, 0.22); }
-[data-theme="light"] .border-white\/40 { border-color: rgba(0, 0, 0, 0.3); }
+[data-theme="light"] .border-white\/10 { border-color: #F4F4F5; }/* zinc-100 */
+[data-theme="light"] .border-white\/15 { border-color: #E4E4E7; }/* zinc-200 */
+[data-theme="light"] .border-white\/20 { border-color: #E4E4E7; }
+[data-theme="light"] .border-white\/25 { border-color: #D4D4D8; }/* zinc-300 */
+[data-theme="light"] .border-white\/30 { border-color: #D4D4D8; }
+[data-theme="light"] .border-white\/40 { border-color: #A1A1AA; }/* zinc-400 */
 
-/* Pickle accent — keep #99FF00 for backgrounds (still readable as
-   a "brand splash"), but darken pickle TEXT to be legible on white. */
-[data-theme="light"] .text-pickle { color: #5C9900; }
+/* Pickle borders — keep brand color but switch to dim variant for subtler edges */
+[data-theme="light"] .border-pickle\/30 { border-color: rgba(63, 115, 0, 0.3); }
+[data-theme="light"] .border-pickle\/40 { border-color: rgba(63, 115, 0, 0.4); }
+[data-theme="light"] .border-pickle\/50 { border-color: rgba(63, 115, 0, 0.5); }
+[data-theme="light"] .border-bright\/40 { border-color: rgba(166, 98, 0, 0.4); }
+[data-theme="light"] .border-bright\/50 { border-color: rgba(166, 98, 0, 0.5); }
 
-/* Bright (yellow) — cannot read on white. Darken text. */
-[data-theme="light"] .text-bright { color: #999900; }
+/* -------------------------------------------------------------
+   Hover/transition states — keep pickle splash subtle on white
+   ------------------------------------------------------------- */
+[data-theme="light"] .hover\:bg-pickle\/5:hover { background-color: rgba(63, 115, 0, 0.06); }
+[data-theme="light"] .hover\:bg-pickle\/10:hover { background-color: rgba(63, 115, 0, 0.1); }
 
-/* Electric (blue) is fine on white; leave as-is */
+/* -------------------------------------------------------------
+   Neon glow utilities — lighter on white
+   ------------------------------------------------------------- */
+[data-theme="light"] .neon-pickle {
+  box-shadow:
+    0 0 0 2px #5C9900,
+    0 2px 12px rgba(63, 115, 0, 0.18);
+}
+[data-theme="light"] .neon-electric {
+  box-shadow:
+    0 0 0 2px #0072B5,
+    0 2px 12px rgba(0, 114, 181, 0.18);
+}
+[data-theme="light"] .neon-bright {
+  box-shadow:
+    0 0 0 2px #A66200,
+    0 2px 12px rgba(166, 98, 0, 0.18);
+}
 
-/* Soft cards / dashed empty states — invert backgrounds */
-[data-theme="light"] .bg-pickle\/5 { background-color: rgba(153, 255, 0, 0.18); }
-[data-theme="light"] .bg-pickle\/10 { background-color: rgba(153, 255, 0, 0.25); }
-[data-theme="light"] .bg-bright\/5 { background-color: rgba(255, 255, 0, 0.22); }
+/* Faint pickle-green grid bg — lighter version on white */
+[data-theme="light"] .grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(63, 115, 0, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(63, 115, 0, 0.07) 1px, transparent 1px);
+}
 
-/* Inputs (the .input class from this file) — light variant */
+/* -------------------------------------------------------------
+   Inputs (the .input class from this file) — light variant
+   ------------------------------------------------------------- */
 [data-theme="light"] .input {
-  background-color: rgba(0, 0, 0, 0.04);
-  border-color: rgba(0, 0, 0, 0.15);
+  background-color: #ffffff;
+  border-color: #D4D4D8;
   color: #18181b;
 }
 [data-theme="light"] .input:focus {
-  border-color: #5C9900;
-  background-color: rgba(153, 255, 0, 0.08);
+  border-color: #3F7300;
+  background-color: rgba(153, 255, 0, 0.06);
 }
 [data-theme="light"] .input::placeholder {
   color: rgba(24, 24, 27, 0.4);
