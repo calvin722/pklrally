@@ -220,21 +220,21 @@ export default function MatchCard({
           <PlayerLine player={match.server_team_p1} starServer />
           <PlayerLine player={match.server_team_p2} />
         </div>
-        {/* Center score */}
-        <div className="flex shrink-0 flex-col items-center gap-1 px-2">
+        {/* Center score — server on left, receiver on right (matches court layout) */}
+        <div className="flex shrink-0 items-center gap-2 px-2">
           <span
             className={`font-mono text-[28px] leading-none font-bold ${
-              serverWon ? "text-pickle" : "text-white/60"
+              serverWon ? "text-pickle" : "text-electric"
             }`}
           >
             {match.server_score}
           </span>
-          <span className="text-[10px] uppercase tracking-widest text-white/30">
+          <span className="font-display text-[10px] uppercase font-bold tracking-widest text-white/30">
             vs
           </span>
           <span
             className={`font-mono text-[28px] leading-none font-bold ${
-              !serverWon ? "text-electric" : "text-white/60"
+              !serverWon ? "text-pickle" : "text-electric"
             }`}
           >
             {match.receiver_score}
