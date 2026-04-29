@@ -11,8 +11,17 @@ export interface PlayerSlot {
   playerId?: string;
   /** Display name shown in UI */
   displayName: string;
-  /** Email captured for guest invite (Phase 5 sends the invite) */
+  /** Email captured for guest invite */
   email?: string;
+  /** If true, send an email invite to this guest after match save */
+  sendInvite?: boolean;
+}
+
+/** Returned by saveMatch when there are guests flagged for invite. */
+export interface PendingInvite {
+  playerId: string;
+  email: string;
+  displayName: string;
 }
 
 /**
@@ -99,10 +108,23 @@ export async function saveMatch(input: {
   receiverP2: PlayerSlot;
   serverScore: number;
   receiverScore: number;
-}): Promise<{ matchId: string; status: string }> {
+}): Promise<{
+  matchId: string;
+  status: string;
+  pendingInvites: PendingInvite[];
+}> {
   const supabase = createClient();
 
-  // For any guest slots without a playerId, create the guest rows first.
+  // Track which slots are flagged for invite, by their position in the input.
+  // We resolve player_ids in parallel below; this captures the email + sendInvite
+  // bits so we can fire invites after the match row is saved.
+  const slots = [
+    input.serverP1,
+    input.serverP2,
+    input.receiverP1,
+    input.receiverP2,
+  ];
+
   async function ensurePlayerId(slot: PlayerSlot): Promise<string> {
     if (slot.playerId) return slot.playerId;
     const created = await createGuest(slot.displayName, slot.email);
@@ -115,6 +137,7 @@ export async function saveMatch(input: {
     ensurePlayerId(input.receiverP1),
     ensurePlayerId(input.receiverP2),
   ]);
+  const playerIds = [p1, p2, p3, p4];
 
   // Find the logger's team by playerId — robust to "me" slot being cleared
   // and re-picked. Whichever team they're on, the OTHER team is the one
@@ -151,5 +174,25 @@ export async function saveMatch(input: {
     .single();
 
   if (error) throw new Error(error.message);
-  return { matchId: data.id, status };
+
+  // Build the list of guests we should email-invite (sendInvite + valid email)
+  const pendingInvites: PendingInvite[] = slots
+    .map((slot, i) => {
+      if (
+        slot.kind === "guest" &&
+        slot.sendInvite &&
+        slot.email &&
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(slot.email)
+      ) {
+        return {
+          playerId: playerIds[i],
+          email: slot.email,
+          displayName: slot.displayName,
+        };
+      }
+      return null;
+    })
+    .filter((x): x is PendingInvite => x !== null);
+
+  return { matchId: data.id, status, pendingInvites };
 }

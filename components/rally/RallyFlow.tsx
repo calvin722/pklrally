@@ -84,6 +84,23 @@ export default function RallyFlow({ me, defaultCourt }: RallyFlowProps) {
         serverScore,
         receiverScore,
       });
+
+      // Fire invite emails for any guests flagged with sendInvite. We don't
+      // block the redirect on these — log failures to console; user can still
+      // resend from the match page later (Phase 5b).
+      for (const invitee of result.pendingInvites) {
+        fetch("/api/invite/match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            matchId: result.matchId,
+            guestPlayerId: invitee.playerId,
+          }),
+        }).catch((err) => {
+          console.error("Invite send failed for", invitee.email, err);
+        });
+      }
+
       router.push(`/?rally_saved=${result.matchId}&status=${result.status}`);
       router.refresh();
     } catch (err) {

@@ -42,6 +42,8 @@ export default function PlayerSlot({
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<PlayerHit[]>([]);
   const [searching, setSearching] = useState(false);
+  const [inviteMode, setInviteMode] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Debounced search
@@ -183,19 +185,77 @@ export default function PlayerSlot({
         <p className="mt-2 text-xs text-white/40">No matches.</p>
       )}
 
-      {query.trim().length >= 2 && (
-        <button
-          type="button"
-          onClick={() =>
-            onPick({
-              kind: "guest",
-              displayName: query.trim(),
-            })
-          }
-          className="mt-3 block font-display text-display-xs uppercase font-semibold tracking-wide text-bright hover:text-pickle"
-        >
-          + Add "{query.trim()}" as guest
-        </button>
+      {query.trim().length >= 2 && !inviteMode && (
+        <div className="mt-3 space-y-2">
+          <button
+            type="button"
+            onClick={() =>
+              onPick({
+                kind: "guest",
+                displayName: query.trim(),
+              })
+            }
+            className="block w-full text-left font-display text-display-xs uppercase font-semibold tracking-wide text-bright hover:text-pickle"
+          >
+            + Add &quot;{query.trim()}&quot; as guest
+          </button>
+          <button
+            type="button"
+            onClick={() => setInviteMode(true)}
+            className="block w-full text-left font-display text-display-xs uppercase font-semibold tracking-wide text-pickle hover:text-bright"
+          >
+            ✉ Send email invite
+          </button>
+        </div>
+      )}
+
+      {inviteMode && (
+        <div className="mt-3 space-y-2 rounded-lg border-2 border-pickle/40 bg-pickle/5 p-3">
+          <p className="text-xs text-white/70">
+            We&apos;ll email <span className="text-pickle">{query.trim()}</span>{" "}
+            with the match score and a link to join. When they sign up, this
+            match counts toward their stats.
+          </p>
+          <input
+            type="email"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+            placeholder="email@example.com"
+            autoFocus
+            className="w-full rounded-lg border-2 border-white/40 bg-black px-3 py-2 text-base text-white placeholder:text-white/40 focus:border-pickle focus:outline-none"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={
+                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim())
+              }
+              onClick={() => {
+                onPick({
+                  kind: "guest",
+                  displayName: query.trim(),
+                  email: inviteEmail.trim(),
+                  sendInvite: true,
+                });
+                setInviteMode(false);
+                setInviteEmail("");
+              }}
+              className="rounded-lg bg-pickle px-3 py-1.5 font-display text-display-xs font-bold uppercase tracking-wide text-black disabled:opacity-50"
+            >
+              Add &amp; invite
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setInviteMode(false);
+                setInviteEmail("");
+              }}
+              className="rounded-lg border-2 border-white/40 px-3 py-1.5 font-display text-display-xs uppercase font-semibold tracking-wide text-white/70 hover:border-pickle hover:text-pickle"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
