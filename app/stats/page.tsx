@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPlayer } from "@/lib/supabase/getCurrentPlayer";
 import MatchCard from "@/components/matches/MatchCard";
+import CompactMatchRow from "@/components/matches/CompactMatchRow";
 import Avatar from "@/components/Avatar";
 import PickleballRating from "@/components/PickleballRating";
 import type { MatchSummary } from "@/lib/matches";
@@ -264,6 +265,7 @@ export default async function StatsPage() {
                       key={m.id}
                       match={m}
                       viewerWon={viewerWon(m, player.id)}
+                      viewerPlayerId={player.id}
                     />
                   ))}
                 </ul>
@@ -319,44 +321,3 @@ function RankPlaceholder({ label }: { label: string }) {
   );
 }
 
-function CompactMatchRow({
-  match,
-  viewerWon,
-}: {
-  match: MatchSummary;
-  viewerWon: boolean;
-}) {
-  const date = new Date(match.played_at);
-  const dateStr = date.toLocaleDateString("default", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-  const timeStr = date.toLocaleTimeString("default", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return (
-    <li className="flex items-center gap-3 px-4 py-3 transition hover:bg-white/[0.03]">
-      <span
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-display text-xs font-extrabold ${
-          viewerWon ? "bg-pickle text-black" : "bg-bright text-black"
-        }`}
-        aria-label={viewerWon ? "Win" : "Loss"}
-      >
-        {viewerWon ? "W" : "L"}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-sans text-sm text-white">
-          {match.court?.name ?? "Unknown court"}
-        </div>
-        <div className="text-xs text-white/50">
-          {dateStr} · {timeStr}
-        </div>
-      </div>
-      <div className="shrink-0 font-mono text-sm text-white/70">
-        {match.server_score} – {match.receiver_score}
-      </div>
-    </li>
-  );
-}

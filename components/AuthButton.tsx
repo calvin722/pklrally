@@ -159,6 +159,7 @@ export default function AuthButton() {
           <MenuItem href="/rally/new" icon="▶" label="Log a Rally" onClick={() => setOpen(false)} />
           <MenuItem href="/stats" icon="📊" label="My Stats" onClick={() => setOpen(false)} />
           <MenuItem href="/ladder" icon="🏆" label="Monthly Ladder" comingSoon />
+          <MenuItem href="/leagues/new" icon="👥" label="Create a League" comingSoon />
           <MenuItem href="/courts/suggest" icon="📍" label="Suggest a Court" onClick={() => setOpen(false)} />
           {player.is_admin && (
             <MenuItem href="/admin" icon="⚙" label="Admin" accent="bright" onClick={() => setOpen(false)} />
