@@ -49,15 +49,54 @@ export async function searchPlayers(query: string, limit = 8) {
 }
 
 /**
+ * Generic names that map to the shared "Guest" placeholder player instead of
+ * creating a new row. Anyone typing these is just saying "anonymous fourth"
+ * rather than naming a specific person.
+ */
+const GENERIC_GUEST_NAMES = new Set([
+  "guest",
+  "anon",
+  "anonymous",
+  "unknown",
+  "tbd",
+  "?",
+  "n/a",
+  "na",
+]);
+
+/**
  * Insert a new guest player row. Used when the user types a name that doesn't
  * match an existing player and clicks "Add as guest".
+ *
+ * Generic placeholder names ("guest", "anon", etc.) without email reuse a
+ * single shared "Guest" row (seeded by migration 0014) so we don't create
+ * dozens of useless duplicate guests.
  */
 export async function createGuest(displayName: string, email?: string) {
   const supabase = createClient();
+  const trimmedName = displayName.trim();
+  const normalized = trimmedName.toLowerCase();
+  const isPlaceholder = !email && GENERIC_GUEST_NAMES.has(normalized);
+
+  if (isPlaceholder) {
+    // Reuse the shared "Guest" player from migration 0014
+    const { data: shared } = await supabase
+      .from("players")
+      .select("id, display_name, is_guest, email")
+      .eq("display_name", "Guest")
+      .eq("is_guest", true)
+      .is("auth_user_id", null)
+      .is("email", null)
+      .limit(1)
+      .maybeSingle();
+    if (shared) return shared;
+    // If migration hasn't run yet, fall through to creating a normal guest
+  }
+
   const { data, error } = await supabase
     .from("players")
     .insert({
-      display_name: displayName.trim(),
+      display_name: trimmedName,
       email: email?.trim() || null,
       is_guest: true,
     })
