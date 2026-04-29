@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import Avatar from "@/components/Avatar";
+import AdminPlayerActions from "@/components/admin/AdminPlayerActions";
+import { getCurrentPlayer } from "@/lib/supabase/getCurrentPlayer";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +13,12 @@ interface PageProps {
 export default async function AdminPlayersPage({ searchParams }: PageProps) {
   const { q, type } = await searchParams;
   const supabase = await createClient();
+  const me = await getCurrentPlayer();
 
   let query = supabase
     .from("players")
     .select(
-      "id, display_name, username, email, city, state, dupr_self_rating, is_admin, is_guest, claimed_at, onboarding_completed_at, matches_played, wins, losses, avatar_url, avatar_focal_x, avatar_focal_y, created_at",
+      "id, display_name, username, email, city, state, dupr_self_rating, is_admin, is_guest, claimed_at, onboarding_completed_at, matches_played, wins, losses, avatar_url, avatar_focal_x, avatar_focal_y, deleted_at, created_at",
     )
     .order("created_at", { ascending: false })
     .limit(200);
@@ -80,12 +83,13 @@ export default async function AdminPlayersPage({ searchParams }: PageProps) {
               <Th>DUPR</Th>
               <Th>W / L</Th>
               <Th>Status</Th>
+              <Th>Actions</Th>
             </tr>
           </thead>
           <tbody>
             {(players ?? []).length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-white/50">
+                <td colSpan={7} className="px-4 py-8 text-center text-white/50">
                   No players match.
                 </td>
               </tr>
@@ -136,6 +140,15 @@ export default async function AdminPlayersPage({ searchParams }: PageProps) {
                 </Td>
                 <Td>
                   <PlayerBadges player={p} />
+                </Td>
+                <Td>
+                  <AdminPlayerActions
+                    playerId={p.id}
+                    displayName={p.display_name}
+                    isAdmin={p.is_admin}
+                    isYou={me?.id === p.id}
+                    alreadyDeleted={p.deleted_at !== null}
+                  />
                 </Td>
               </tr>
             ))}
