@@ -33,11 +33,34 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://pklrally.com";
+
 export const metadata: Metadata = {
-  title: "PKLRALLY — The Live Pulse of Pickleball",
+  metadataBase: new URL(SITE_URL),
+  title: "PKLRALLY — Play, Track & Win",
   description:
-    "Log rallies, track stats, and watch your city light up. The neon-arcade social map of pickleball.",
+    "The social map of pickleball. Log your matches, track your stats, and compete for monthly trophies in your city.",
   applicationName: "PKLRALLY",
+  openGraph: {
+    title: "PKLRALLY — Play, Track & Win",
+    description:
+      "Log your matches, track your stats, and compete for monthly trophies in your city.",
+    url: SITE_URL,
+    siteName: "PKLRALLY",
+    type: "website",
+    // Image auto-wired from app/opengraph-image.tsx
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PKLRALLY — Play, Track & Win",
+    description:
+      "Log your matches, track your stats, and compete for monthly trophies in your city.",
+    // Image auto-wired from app/opengraph-image.tsx
+  },
+  icons: {
+    icon: "/wordmark-dark.svg",
+  },
 };
 
 export const viewport: Viewport = {

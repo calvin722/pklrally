@@ -169,9 +169,8 @@ function IntroSlide({ onNext }: { onNext: () => void }) {
         Welcome to PKLRALLY
       </h2>
       <p className="text-base text-white/80 leading-relaxed">
-        The live pulse of pickleball. Log your matches and collect your stats.
-        See your ranking by court, city, state, and nationally — and soon,
-        globally.
+        Play, track & win. Log your matches and collect your stats. See your
+        ranking by court, city, state, and nationally — and soon, globally.
       </p>
       <div className="flex justify-end pt-2">
         <NextButton onClick={onNext}>Continue ▸</NextButton>

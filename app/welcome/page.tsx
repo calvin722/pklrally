@@ -15,7 +15,7 @@ export default async function WelcomePage() {
       <div className="w-full max-w-xl rounded-2xl border-2 border-pickle bg-black p-8 neon-pickle">
         <Wordmark size="lg" priority />
         <h1 className="sr-only">PKLRALLY</h1>
-        <p className="mt-1 text-sm text-white/60">the live pulse of pickleball</p>
+        <p className="mt-1 text-sm text-white/60">Play, Track &amp; Win</p>
 
         <div className="mt-8">
           <WelcomeFlow

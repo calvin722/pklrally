@@ -63,7 +63,7 @@ function LoginForm() {
           <span className="sr-only">PKLRALLY</span>
         </Link>
         <p className="mt-1 text-sm text-white/60">
-          the live pulse of pickleball
+          Play, Track &amp; Win
         </p>
 
         {status !== "sent" ? (

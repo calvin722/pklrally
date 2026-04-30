@@ -121,7 +121,7 @@ export async function POST() {
 <div style="font-family:Inter,system-ui,sans-serif;background:#000;color:#fff;padding:32px 16px;">
   <div style="max-width:560px;margin:0 auto;background:#0a0a0a;border:2px solid #99FF00;border-radius:16px;padding:32px;">
     <h1 style="font-family:Manrope,system-ui,sans-serif;font-weight:800;font-size:32px;letter-spacing:-0.02em;color:#99FF00;margin:0 0 4px;">PKL<span style="color:#FFFF00;">RALLY</span></h1>
-    <p style="margin:0 0 24px;color:rgba(255,255,255,0.6);font-size:14px;">welcome to the live pulse of pickleball</p>
+    <p style="margin:0 0 24px;color:rgba(255,255,255,0.6);font-size:14px;">play, track &amp; win</p>
     <h2 style="font-family:Manrope,system-ui,sans-serif;font-weight:800;font-size:22px;color:#FFFF00;margin:0 0 12px;">You have ${myMatches.length} match${myMatches.length === 1 ? "" : "es"} to vouch</h2>
     <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">Hi ${escapeHtml(player.display_name)},</p>
     <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">
