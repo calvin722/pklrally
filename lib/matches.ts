@@ -16,7 +16,13 @@ export interface MatchPlayer {
 
 export interface MatchSummary {
   id: string;
-  court: { id: string; name: string; city: string; state: string } | null;
+  court: {
+    id: string;
+    name: string;
+    city: string;
+    state: string;
+    timezone?: string | null;
+  } | null;
   played_at: string;
   status: MatchStatus;
   server_score: number;
@@ -39,7 +45,7 @@ const SELECT_FULL = `
   server_score,
   receiver_score,
   logged_by,
-  court:courts (id, name, city, state),
+  court:courts (id, name, city, state, timezone),
   server_team_p1:players!matches_server_team_p1_fkey (id, display_name, is_guest, avatar_url),
   server_team_p2:players!matches_server_team_p2_fkey (id, display_name, is_guest, avatar_url),
   receiver_team_p1:players!matches_receiver_team_p1_fkey (id, display_name, is_guest, avatar_url),

@@ -129,6 +129,7 @@ export default async function ProfilePage({ params }: PageProps) {
                 initialLastName={player.last_name}
                 initialNamePublic={player.name_public}
                 initialDupr={player.dupr_self_rating}
+                initialDuprChangedAt={player.dupr_self_rating_changed_at}
                 initialCity={player.city}
                 initialState={player.state}
               />

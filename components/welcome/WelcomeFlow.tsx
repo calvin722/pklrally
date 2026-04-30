@@ -35,6 +35,7 @@ export default function WelcomeFlow({
   const [lastName, setLastName] = useState(initialLastName ?? "");
   const [namePublic, setNamePublic] = useState(initialNamePublic);
   const [rating, setRating] = useState<number>(initialDupr ?? 3.0);
+  const [ratingAccepted, setRatingAccepted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +87,8 @@ export default function WelcomeFlow({
       return setError("That username is unavailable.");
     if (!firstName.trim()) return setError("Please enter your first name.");
     if (!lastName.trim()) return setError("Please enter your last name.");
+    if (!ratingAccepted)
+      return setError("Please confirm you understand the rating lock.");
 
     setSaving(true);
     setError(null);
@@ -150,6 +153,8 @@ export default function WelcomeFlow({
           setNamePublic={setNamePublic}
           rating={rating}
           setRating={setRating}
+          ratingAccepted={ratingAccepted}
+          setRatingAccepted={setRatingAccepted}
           saving={saving}
           error={error}
           onBack={() => setStep(2)}
@@ -277,6 +282,8 @@ interface FormStepProps {
   setNamePublic: (b: boolean) => void;
   rating: number;
   setRating: (n: number) => void;
+  ratingAccepted: boolean;
+  setRatingAccepted: (b: boolean) => void;
   saving: boolean;
   error: string | null;
   onBack: () => void;
@@ -295,6 +302,8 @@ function FormStep({
   setNamePublic,
   rating,
   setRating,
+  ratingAccepted,
+  setRatingAccepted,
   saving,
   error,
   onBack,
@@ -411,8 +420,25 @@ function FormStep({
         </div>
         <p className="mt-2 text-xs text-white/50 leading-relaxed">
           2.0 = beginner · 3.0–4.0 = intermediate · 4.0–5.0 = advanced · 5.0+
-          = elite. Adjust later if needed.
+          = elite.
         </p>
+      </label>
+
+      {/* Rating-lock acknowledgment */}
+      <label className="flex cursor-pointer items-start gap-3 rounded-xl border-2 border-pickle/40 bg-pickle/5 p-3">
+        <input
+          type="checkbox"
+          checked={ratingAccepted}
+          onChange={(e) => setRatingAccepted(e.target.checked)}
+          className="mt-0.5 h-5 w-5 shrink-0 accent-pickle"
+        />
+        <span className="text-sm leading-relaxed text-white/85">
+          I&apos;ve picked my rating accurately. I understand it{" "}
+          <span className="font-bold text-pickle">cannot be changed</span>{" "}
+          again until the 1st of next month, and that it directly affects
+          ladder stats (a higher rating discounts your wins against
+          lower-rated players).
+        </span>
       </label>
 
       <div className="flex items-center justify-between gap-3 pt-2">

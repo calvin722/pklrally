@@ -12,6 +12,7 @@ import {
   type MatchSummary,
 } from "@/lib/matches";
 import Avatar from "@/components/Avatar";
+import { formatAtTz } from "@/lib/datetime";
 
 interface MatchCardProps {
   match: MatchSummary;
@@ -197,6 +198,7 @@ export default function MatchCard({
         </span>
         <time
           dateTime={match.played_at}
+          title={formatAtTz(match.played_at, match.court?.timezone)}
           className="font-mono text-xs text-white/50"
         >
           {formatRelative(match.played_at)}
@@ -466,3 +468,6 @@ function formatRelative(iso: string): string {
   if (day < 7) return `${day}d ago`;
   return new Date(iso).toLocaleDateString();
 }
+
+// Re-import here so TS picks it up at module top in addition to formatRelative
+// (formatAtTz used inline above for the title tooltip).

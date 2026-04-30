@@ -11,8 +11,33 @@ interface ProfileEditorProps {
   initialLastName: string | null;
   initialNamePublic: boolean;
   initialDupr: number | null;
+  initialDuprChangedAt?: string | null;
   initialCity: string | null;
   initialState: string | null;
+}
+
+/**
+ * True if the rating was last changed within the current calendar month
+ * (UTC). Matches the server-side trigger logic from migration 0023.
+ */
+function isRatingLockedThisMonth(changedAt: string | null | undefined): boolean {
+  if (!changedAt) return false;
+  const d = new Date(changedAt);
+  const now = new Date();
+  return (
+    d.getUTCFullYear() === now.getUTCFullYear() &&
+    d.getUTCMonth() === now.getUTCMonth()
+  );
+}
+
+function nextMonthFirstLabel(): string {
+  const d = new Date();
+  const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+  return next.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -30,6 +55,7 @@ export default function ProfileEditor({
   initialLastName,
   initialNamePublic,
   initialDupr,
+  initialDuprChangedAt,
   initialCity,
   initialState,
 }: ProfileEditorProps) {
@@ -44,6 +70,11 @@ export default function ProfileEditor({
   const [stateCode, setStateCode] = useState(initialState ?? "");
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+
+  // Rating lock state
+  const ratingLocked = isRatingLockedThisMonth(initialDuprChangedAt);
+  const ratingChanged = (initialDupr ?? null) !== rating;
+  const [ratingAccepted, setRatingAccepted] = useState(false);
 
   const setUsername = (v: string) =>
     setUsernameRaw(v.toLowerCase().replace(/\s+/g, ""));
@@ -93,21 +124,33 @@ export default function ProfileEditor({
       setError("Pick an available username before saving.");
       return;
     }
+    if (ratingChanged && !ratingAccepted) {
+      setError(
+        "Please confirm you understand the rating lock before saving.",
+      );
+      return;
+    }
     setStatus("saving");
     setError(null);
 
     const supabase = createClient();
+    // Skip writing the rating field when it hasn't changed — avoids
+    // tripping the monthly-lock trigger unnecessarily.
+    const update: Record<string, unknown> = {
+      username: username.toLowerCase().trim(),
+      first_name: firstName.trim() || null,
+      last_name: lastName.trim() || null,
+      name_public: namePublic,
+      city: city.trim() || null,
+      state: stateCode.trim().toUpperCase() || null,
+    };
+    if (ratingChanged) {
+      update.dupr_self_rating = rating;
+    }
+
     const { error } = await supabase
       .from("players")
-      .update({
-        username: username.toLowerCase().trim(),
-        first_name: firstName.trim() || null,
-        last_name: lastName.trim() || null,
-        name_public: namePublic,
-        dupr_self_rating: rating,
-        city: city.trim() || null,
-        state: stateCode.trim().toUpperCase() || null,
-      })
+      .update(update)
       .eq("id", playerId);
 
     if (error) {
@@ -192,7 +235,8 @@ export default function ProfileEditor({
           step={0.25}
           value={rating}
           onChange={(e) => setRating(parseFloat(e.target.value))}
-          className="w-full accent-pickle"
+          disabled={ratingLocked}
+          className="w-full accent-pickle disabled:opacity-50"
         />
         <div className="mt-1 flex justify-between font-mono text-xs text-white/40">
           <span>2.0</span>
@@ -203,6 +247,38 @@ export default function ProfileEditor({
           2.0 = beginner · 3.0–4.0 = intermediate · 4.0–5.0 = advanced · 5.0+
           = elite.
         </p>
+
+        {ratingLocked ? (
+          <div className="mt-3 rounded-lg border-2 border-bright/40 bg-bright/5 p-3">
+            <p className="font-display text-display-xs uppercase font-bold tracking-widest text-bright">
+              Rating locked this month
+            </p>
+            <p className="mt-1 text-xs text-white/70 leading-relaxed">
+              You changed your rating already this month. Ratings affect ladder
+              math (the team-rating-gap weighting), so you can change them once
+              per month. Next change available on{" "}
+              <span className="text-pickle">{nextMonthFirstLabel()}</span>.
+            </p>
+          </div>
+        ) : (
+          ratingChanged && (
+            <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border-2 border-pickle/40 bg-pickle/5 p-3">
+              <input
+                type="checkbox"
+                checked={ratingAccepted}
+                onChange={(e) => setRatingAccepted(e.target.checked)}
+                className="mt-0.5 h-5 w-5 shrink-0 accent-pickle"
+              />
+              <span className="text-sm leading-relaxed text-white/85">
+                I&apos;ve picked my rating accurately. I understand it{" "}
+                <span className="font-bold text-pickle">cannot be changed</span>{" "}
+                again until the 1st of next month, and that it directly affects
+                ladder stats (a higher rating discounts your wins against
+                lower-rated players).
+              </span>
+            </label>
+          )
+        )}
       </Field>
 
       <div className="grid grid-cols-2 gap-3">

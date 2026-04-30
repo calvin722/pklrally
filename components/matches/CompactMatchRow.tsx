@@ -3,6 +3,7 @@
 import { useState } from "react";
 import MatchCard from "./MatchCard";
 import type { MatchSummary } from "@/lib/matches";
+import { formatAtTz } from "@/lib/datetime";
 
 interface CompactMatchRowProps {
   match: MatchSummary;
@@ -22,15 +23,17 @@ export default function CompactMatchRow({
 }: CompactMatchRowProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const date = new Date(match.played_at);
-  const dateStr = date.toLocaleDateString("default", {
+  // Display in the court's timezone, not the viewer's
+  const tz = match.court?.timezone ?? null;
+  const dateStr = formatAtTz(match.played_at, tz, {
     weekday: "short",
     month: "short",
     day: "numeric",
   });
-  const timeStr = date.toLocaleTimeString("default", {
+  const timeStr = formatAtTz(match.played_at, tz, {
     hour: "numeric",
     minute: "2-digit",
+    timeZoneName: "short",
   });
 
   if (expanded) {
