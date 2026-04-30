@@ -53,13 +53,21 @@ interface Props {
   cityOptions: CityOption[];
 }
 
+interface SlotState {
+  sponsorshipId: string | null;
+  sponsorName: string | null;
+  sponsorLogo: string | null;
+  prizeTitle: string | null;
+  prizeImageUrl: string | null;
+}
+
 /**
- * Two stacked panels:
- *   1. Sponsors — add new sponsors (logo upload to "sponsor-assets" bucket)
- *   2. Sponsorships — bind a sponsor to a city + month with prizes
+ * One unified form that creates a sponsor + their sponsorship + their prize
+ * for a specific city/month/place in one save. Below the form, a grid of
+ * (city × month) cards shows all 3 slots with edit/delete actions.
  *
- * Lives entirely client-side: directly hits Supabase via the admin RLS
- * policies on sponsors / sponsorships. No server actions yet.
+ * Place === slot. 1st place sponsor brings the 1st place prize. Max 3 per
+ * city/month, enforced by the DB unique index from migration 0022.
  */
 export default function SponsorshipManager({
   sponsors,
@@ -67,39 +75,112 @@ export default function SponsorshipManager({
   prizes,
   cityOptions,
 }: Props) {
-  return (
-    <div className="mt-8 space-y-10">
-      <SponsorPanel sponsors={sponsors} />
-      <SponsorshipPanel
-        sponsors={sponsors}
-        sponsorships={sponsorships}
-        cityOptions={cityOptions}
-      />
-      <PrizesPanel prizes={prizes} cityOptions={cityOptions} />
-    </div>
-  );
-}
-
-// ============================================================
-// Panel 1: Sponsors (add new + list existing)
-// ============================================================
-
-function SponsorPanel({ sponsors }: { sponsors: Sponsor[] }) {
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement | null>(null);
+  const logoRef = useRef<HTMLInputElement | null>(null);
+  const prizeImageRef = useRef<HTMLInputElement | null>(null);
+  const monthOptions = useMemo(() => buildMonthOptions(), []);
 
-  const [name, setName] = useState("");
+  // Form state
+  const [cityKey, setCityKey] = useState("");
+  const [monthKey, setMonthKey] = useState(currentMonthKey());
+  const [place, setPlace] = useState<number>(1);
+  const [sponsorName, setSponsorName] = useState("");
   const [website, setWebsite] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [shortDescription, setShortDescription] = useState("");
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [prizeTitle, setPrizeTitle] = useState("");
+  const [prizeDescription, setPrizeDescription] = useState("");
+  const [prizeImageFile, setPrizeImageFile] = useState<File | null>(null);
+  const [amountDollars, setAmountDollars] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  async function uploadLogo(file: File): Promise<string> {
+  // ============================================================
+  // Build a (city, month) → 3-slot view of existing entries
+  // ============================================================
+  const grouped = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        city: string;
+        state: string;
+        monthKey: string;
+        slots: Record<number, SlotState>;
+      }
+    >();
+
+    function ensure(c: string, s: string, m: string) {
+      const k = `${m}::${s.toUpperCase()}::${c.toLowerCase()}`;
+      if (!map.has(k)) {
+        map.set(k, {
+          city: c,
+          state: s.toUpperCase(),
+          monthKey: m,
+          slots: {
+            1: emptySlot(),
+            2: emptySlot(),
+            3: emptySlot(),
+          },
+        });
+      }
+      return map.get(k)!;
+    }
+
+    for (const sp of sponsorships) {
+      if (sp.status !== "active") continue;
+      const sponsor = Array.isArray(sp.sponsor) ? sp.sponsor[0] : sp.sponsor;
+      const entry = ensure(sp.city, sp.state, sp.month_key);
+      const slot = entry.slots[sp.slot];
+      slot.sponsorshipId = sp.id;
+      slot.sponsorName = sponsor?.name ?? null;
+      slot.sponsorLogo = sponsor?.logo_url ?? null;
+    }
+    for (const pr of prizes) {
+      const entry = ensure(pr.city, pr.state, pr.month_key);
+      const slot = entry.slots[pr.place];
+      slot.prizeTitle = pr.title;
+      slot.prizeImageUrl = pr.image_url;
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.monthKey !== b.monthKey) return b.monthKey.localeCompare(a.monthKey);
+      if (a.state !== b.state) return a.state.localeCompare(b.state);
+      return a.city.localeCompare(b.city);
+    });
+  }, [sponsorships, prizes]);
+
+  // Disable places that already have an entry for the current city/month
+  const filledPlaces = useMemo(() => {
+    if (!cityKey) return new Set<number>();
+    const [stateUp, cityLower] = cityKey.split("::");
+    const entry = grouped.find(
+      (g) =>
+        g.state === stateUp &&
+        g.city.toLowerCase() === cityLower &&
+        g.monthKey === monthKey,
+    );
+    if (!entry) return new Set<number>();
+    const set = new Set<number>();
+    for (const p of [1, 2, 3]) {
+      const s = entry.slots[p];
+      if (s.sponsorshipId || s.prizeTitle) set.add(p);
+    }
+    return set;
+  }, [cityKey, monthKey, grouped]);
+
+  // ============================================================
+  // Helpers
+  // ============================================================
+  async function uploadFile(
+    file: File,
+    pathPrefix: string,
+  ): Promise<string> {
     const supabase = createClient();
-    const ext = file.name.split(".").pop() ?? "png";
-    const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const path = `${pathPrefix}/${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}.${ext}`;
     const { error } = await supabase.storage
       .from("sponsor-assets")
       .upload(path, file, { upsert: false, contentType: file.type });
@@ -108,233 +189,36 @@ function SponsorPanel({ sponsors }: { sponsors: Sponsor[] }) {
     return data.publicUrl;
   }
 
+  function resetForm() {
+    setSponsorName("");
+    setWebsite("");
+    setContactEmail("");
+    setShortDescription("");
+    setLogoFile(null);
+    setPrizeTitle("");
+    setPrizeDescription("");
+    setPrizeImageFile(null);
+    setAmountDollars("");
+    if (logoRef.current) logoRef.current.value = "";
+    if (prizeImageRef.current) prizeImageRef.current.value = "";
+    setErr(null);
+  }
+
+  // ============================================================
+  // Submit: create sponsor + sponsorship + prize in one shot
+  // ============================================================
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setErr(null);
     try {
-      let logoUrl: string | null = null;
-      if (logoFile) {
-        logoUrl = await uploadLogo(logoFile);
-      }
-      const supabase = createClient();
-      const { error } = await supabase.from("sponsors").insert({
-        name: name.trim(),
-        website: website.trim() || null,
-        contact_email: contactEmail.trim() || null,
-        short_description: shortDescription.trim() || null,
-        logo_url: logoUrl,
-      });
-      if (error) throw new Error(error.message);
-      setName("");
-      setWebsite("");
-      setContactEmail("");
-      setShortDescription("");
-      setLogoFile(null);
-      if (fileRef.current) fileRef.current.value = "";
-      router.refresh();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed to save sponsor");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this sponsor and all their sponsorships?")) return;
-    const supabase = createClient();
-    const { error } = await supabase.from("sponsors").delete().eq("id", id);
-    if (error) {
-      alert(error.message);
-      return;
-    }
-    router.refresh();
-  }
-
-  return (
-    <section>
-      <h2 className="font-display text-display-md font-extrabold text-pickle">
-        Sponsors
-      </h2>
-      <p className="mt-1 text-sm text-white/60">
-        A sponsor is a business. Logos go to the public{" "}
-        <code className="font-mono text-pickle">sponsor-assets</code> bucket.
-      </p>
-
-      <form
-        onSubmit={handleSubmit}
-        className="mt-4 grid gap-3 rounded-2xl border-2 border-pickle/40 bg-white/[0.02] p-4 sm:grid-cols-2"
-      >
-        <Field label="Sponsor name *">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            className="input"
-            placeholder="e.g. Cactus Branch Co."
-          />
-        </Field>
-        <Field label="Website">
-          <input
-            value={website}
-            onChange={(e) => setWebsite(e.target.value)}
-            type="url"
-            className="input"
-            placeholder="https://…"
-          />
-        </Field>
-        <Field label="Contact email">
-          <input
-            value={contactEmail}
-            onChange={(e) => setContactEmail(e.target.value)}
-            type="email"
-            className="input"
-            placeholder="ops@example.com"
-          />
-        </Field>
-        <Field label="Logo (PNG/SVG, ≤2 MB)">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/jpeg,image/svg+xml,image/webp"
-            onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
-            className="input"
-          />
-        </Field>
-        <Field label="Short description (1 line)" full>
-          <input
-            value={shortDescription}
-            onChange={(e) => setShortDescription(e.target.value)}
-            maxLength={140}
-            className="input"
-            placeholder="Local pickleball pro shop · Las Cruces, NM"
-          />
-        </Field>
-        <div className="sm:col-span-2">
-          <button
-            type="submit"
-            disabled={busy || !name.trim()}
-            className="rounded-lg bg-pickle px-4 py-2 font-display text-display-xs font-bold uppercase tracking-wide text-black disabled:opacity-50"
-          >
-            {busy ? "Saving…" : "Add sponsor"}
-          </button>
-          {err && <span className="ml-3 text-sm text-bright">⚠ {err}</span>}
-        </div>
-      </form>
-
-      <div className="mt-6 overflow-hidden rounded-2xl border-2 border-pickle">
-        <table className="w-full border-collapse text-sm">
-          <thead className="bg-pickle text-black">
-            <tr>
-              <Th>Logo</Th>
-              <Th>Name</Th>
-              <Th>Website</Th>
-              <Th>Contact</Th>
-              <Th>Description</Th>
-              <Th>Actions</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {sponsors.length === 0 && (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-4 py-8 text-center text-white/50"
-                >
-                  No sponsors yet. Add the first one above.
-                </td>
-              </tr>
-            )}
-            {sponsors.map((s) => (
-              <tr key={s.id} className="border-t-2 border-pickle/30">
-                <Td>
-                  {s.logo_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={s.logo_url}
-                      alt={s.name}
-                      className="h-10 w-10 rounded border-2 border-pickle bg-white object-contain p-0.5"
-                    />
-                  ) : (
-                    <span className="text-white/30">—</span>
-                  )}
-                </Td>
-                <Td>
-                  <span className="text-white">{s.name}</span>
-                </Td>
-                <Td>
-                  {s.website ? (
-                    <a
-                      href={s.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-pickle hover:underline"
-                    >
-                      ↗
-                    </a>
-                  ) : (
-                    <span className="text-white/30">—</span>
-                  )}
-                </Td>
-                <Td>
-                  <span className="font-mono text-xs text-white/60">
-                    {s.contact_email ?? "—"}
-                  </span>
-                </Td>
-                <Td>
-                  <span className="text-xs text-white/70">
-                    {s.short_description ?? "—"}
-                  </span>
-                </Td>
-                <Td>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(s.id)}
-                    className="rounded-md border border-bright px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-bright hover:bg-bright hover:text-black"
-                  >
-                    Delete
-                  </button>
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-// ============================================================
-// Panel 2: Sponsorships (sponsor × city × month with prizes)
-// ============================================================
-
-function SponsorshipPanel({
-  sponsors,
-  sponsorships,
-  cityOptions,
-}: {
-  sponsors: Sponsor[];
-  sponsorships: SponsorshipRow[];
-  cityOptions: CityOption[];
-}) {
-  const router = useRouter();
-  const monthOptions = useMemo(() => buildMonthOptions(), []);
-
-  const [sponsorId, setSponsorId] = useState("");
-  const [cityKey, setCityKey] = useState(""); // "STATE::city"
-  const [monthKey, setMonthKey] = useState(currentMonthKey());
-  const [slot, setSlot] = useState<number>(1);
-  const [amountDollars, setAmountDollars] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setErr(null);
-    try {
-      if (!sponsorId) throw new Error("Choose a sponsor");
       if (!cityKey) throw new Error("Choose a city");
+      if (!sponsorName.trim()) throw new Error("Sponsor name is required");
+      if (filledPlaces.has(place)) {
+        throw new Error(
+          `${ordinal(place)} place is already taken for this city + month. Delete the existing one first.`,
+        );
+      }
       const [stateUp, cityLower] = cityKey.split("::");
       const cityFull =
         cityOptions.find(
@@ -342,533 +226,431 @@ function SponsorshipPanel({
             c.state.toUpperCase() === stateUp &&
             c.city.toLowerCase() === cityLower,
         )?.city ?? cityLower;
+
+      let logoUrl: string | null = null;
+      if (logoFile) logoUrl = await uploadFile(logoFile, "logos");
+
+      let prizeImageUrl: string | null = null;
+      if (prizeImageFile)
+        prizeImageUrl = await uploadFile(prizeImageFile, "prizes");
+
+      const supabase = createClient();
+
+      // 1. Create sponsor row
+      const { data: sponsorRow, error: sponsorErr } = await supabase
+        .from("sponsors")
+        .insert({
+          name: sponsorName.trim(),
+          website: website.trim() || null,
+          contact_email: contactEmail.trim() || null,
+          short_description: shortDescription.trim() || null,
+          logo_url: logoUrl,
+        })
+        .select("id")
+        .single();
+      if (sponsorErr) throw new Error(`Sponsor: ${sponsorErr.message}`);
 
       const amountCents = amountDollars
         ? Math.round(Number(amountDollars) * 100)
         : null;
 
-      const supabase = createClient();
-      const { error } = await supabase.from("sponsorships").insert({
-        sponsor_id: sponsorId,
+      // 2. Create sponsorship binding
+      const { error: spErr } = await supabase.from("sponsorships").insert({
+        sponsor_id: sponsorRow.id,
         city: cityFull,
         state: stateUp,
         month_key: monthKey,
-        slot,
-        amount_paid_cents: amountCents,
+        slot: place,
         status: "active",
+        amount_paid_cents: amountCents,
       });
-      if (error) throw new Error(error.message);
+      if (spErr) throw new Error(`Sponsorship: ${spErr.message}`);
 
-      setAmountDollars("");
+      // 3. Create prize (only if any prize info was filled in)
+      if (prizeTitle.trim() || prizeDescription.trim() || prizeImageUrl) {
+        const { error: prizeErr } = await supabase
+          .from("ladder_prizes")
+          .insert({
+            city: cityFull,
+            state: stateUp,
+            month_key: monthKey,
+            place,
+            title: prizeTitle.trim() || null,
+            description: prizeDescription.trim() || null,
+            image_url: prizeImageUrl,
+          });
+        if (prizeErr) throw new Error(`Prize: ${prizeErr.message}`);
+      }
+
+      resetForm();
       router.refresh();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed to save sponsorship");
+      setErr(e instanceof Error ? e.message : "Failed to save");
     } finally {
       setBusy(false);
     }
   }
 
-  async function setSponsorshipStatus(id: string, status: string) {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("sponsorships")
-      .update({ status })
-      .eq("id", id);
-    if (error) {
-      alert(error.message);
+  // ============================================================
+  // Delete a slot — removes sponsorship + prize (cascades delete sponsor
+  // because we always create a fresh sponsor row per sponsorship)
+  // ============================================================
+  async function handleDeleteSlot(
+    city: string,
+    state: string,
+    month: string,
+    slot: number,
+    sponsorshipId: string | null,
+  ) {
+    if (!confirm(`Delete the ${ordinal(slot)} slot for ${city}, ${state} ${monthLabel(month)}?`))
       return;
-    }
-    router.refresh();
-  }
-
-  return (
-    <section>
-      <h2 className="font-display text-display-md font-extrabold text-pickle">
-        Sponsorships
-      </h2>
-      <p className="mt-1 text-sm text-white/60">
-        Bind a sponsor to one of three slots in a city for a specific month.
-        Each city + month + slot can hold one active sponsor. Prizes are
-        managed in the panel below.
-      </p>
-
-      <form
-        onSubmit={handleSubmit}
-        className="mt-4 grid gap-3 rounded-2xl border-2 border-pickle/40 bg-white/[0.02] p-4 sm:grid-cols-4"
-      >
-        <Field label="Sponsor *">
-          <select
-            value={sponsorId}
-            onChange={(e) => setSponsorId(e.target.value)}
-            required
-            className="input"
-          >
-            <option value="">— pick sponsor —</option>
-            {sponsors.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="City *">
-          <select
-            value={cityKey}
-            onChange={(e) => setCityKey(e.target.value)}
-            required
-            className="input"
-          >
-            <option value="">— pick city —</option>
-            {cityOptions.map((c) => (
-              <option
-                key={`${c.state}-${c.city}`}
-                value={`${c.state.toUpperCase()}::${c.city.toLowerCase()}`}
-              >
-                {c.city}, {c.state}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Month *">
-          <select
-            value={monthKey}
-            onChange={(e) => setMonthKey(e.target.value)}
-            className="input"
-          >
-            {monthOptions.map((m) => (
-              <option key={m} value={m}>
-                {monthLabel(m)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Slot *">
-          <select
-            value={slot}
-            onChange={(e) => setSlot(Number(e.target.value))}
-            className="input"
-          >
-            <option value={1}>Slot 1</option>
-            <option value={2}>Slot 2</option>
-            <option value={3}>Slot 3</option>
-          </select>
-        </Field>
-
-        <Field label="Amount paid (USD)" full>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={amountDollars}
-            onChange={(e) => setAmountDollars(e.target.value)}
-            className="input"
-            placeholder="e.g. 99.00"
-          />
-        </Field>
-
-        <div className="sm:col-span-4">
-          <button
-            type="submit"
-            disabled={busy || !sponsorId || !cityKey}
-            className="rounded-lg bg-pickle px-4 py-2 font-display text-display-xs font-bold uppercase tracking-wide text-black disabled:opacity-50"
-          >
-            {busy ? "Saving…" : "Add sponsorship"}
-          </button>
-          {err && <span className="ml-3 text-sm text-bright">⚠ {err}</span>}
-        </div>
-      </form>
-
-      <div className="mt-6 overflow-hidden rounded-2xl border-2 border-pickle">
-        <table className="w-full border-collapse text-sm">
-          <thead className="bg-pickle text-black">
-            <tr>
-              <Th>Month</Th>
-              <Th>City</Th>
-              <Th>Slot</Th>
-              <Th>Sponsor</Th>
-              <Th>Paid</Th>
-              <Th>Status</Th>
-              <Th>Actions</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {sponsorships.length === 0 && (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-8 text-center text-white/50"
-                >
-                  No sponsorships yet. Add a sponsor above, then bind them to
-                  a city + month + slot.
-                </td>
-              </tr>
-            )}
-            {sponsorships.map((sp) => {
-              const sponsor = Array.isArray(sp.sponsor)
-                ? sp.sponsor[0]
-                : sp.sponsor;
-              return (
-                <tr key={sp.id} className="border-t-2 border-pickle/30">
-                  <Td>
-                    <span className="font-mono text-xs text-white/80">
-                      {monthLabel(sp.month_key)}
-                    </span>
-                  </Td>
-                  <Td>
-                    <span className="text-white">
-                      {sp.city}, {sp.state}
-                    </span>
-                  </Td>
-                  <Td>
-                    <span className="font-mono text-xs text-pickle">
-                      {sp.slot}
-                    </span>
-                  </Td>
-                  <Td>
-                    <span className="text-white">{sponsor?.name ?? "—"}</span>
-                  </Td>
-                  <Td>
-                    <span className="font-mono text-xs text-white/60">
-                      {sp.amount_paid_cents != null
-                        ? `$${(sp.amount_paid_cents / 100).toFixed(2)}`
-                        : "—"}
-                    </span>
-                  </Td>
-                  <Td>
-                    <span
-                      className={`font-display text-[10px] uppercase font-bold tracking-widest ${
-                        sp.status === "active"
-                          ? "text-pickle"
-                          : sp.status === "expired"
-                            ? "text-white/40"
-                            : "text-bright"
-                      }`}
-                    >
-                      {sp.status}
-                    </span>
-                  </Td>
-                  <Td>
-                    <div className="flex gap-1">
-                      {sp.status !== "active" && (
-                        <button
-                          type="button"
-                          onClick={() => setSponsorshipStatus(sp.id, "active")}
-                          className="rounded-md bg-pickle px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-black"
-                        >
-                          Activate
-                        </button>
-                      )}
-                      {sp.status !== "expired" && (
-                        <button
-                          type="button"
-                          onClick={() => setSponsorshipStatus(sp.id, "expired")}
-                          className="rounded-md border border-white/30 px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-white/70 hover:bg-white/10"
-                        >
-                          Expire
-                        </button>
-                      )}
-                    </div>
-                  </Td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-// ============================================================
-// Panel 3: Prizes (1st / 2nd / 3rd per city + month)
-// ============================================================
-
-function PrizesPanel({
-  prizes,
-  cityOptions,
-}: {
-  prizes: PrizeRow[];
-  cityOptions: CityOption[];
-}) {
-  const router = useRouter();
-  const imageRef = useRef<HTMLInputElement | null>(null);
-  const monthOptions = useMemo(() => buildMonthOptions(), []);
-
-  const [cityKey, setCityKey] = useState("");
-  const [monthKey, setMonthKey] = useState(currentMonthKey());
-  const [place, setPlace] = useState<number>(1);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function uploadImage(file: File): Promise<string> {
     const supabase = createClient();
-    const ext = file.name.split(".").pop() ?? "jpg";
-    const path = `prizes/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await supabase.storage
-      .from("sponsor-assets")
-      .upload(path, file, { upsert: false, contentType: file.type });
-    if (error) throw new Error(error.message);
-    const { data } = supabase.storage.from("sponsor-assets").getPublicUrl(path);
-    return data.publicUrl;
-  }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setErr(null);
-    try {
-      if (!cityKey) throw new Error("Choose a city");
-      const [stateUp, cityLower] = cityKey.split("::");
-      const cityFull =
-        cityOptions.find(
-          (c) =>
-            c.state.toUpperCase() === stateUp &&
-            c.city.toLowerCase() === cityLower,
-        )?.city ?? cityLower;
-
-      let imageUrl: string | null = null;
-      if (imageFile) {
-        imageUrl = await uploadImage(imageFile);
-      }
-
-      const supabase = createClient();
-      // Upsert: if a prize exists for this city/month/place, replace it.
-      // Otherwise insert new.
-      const { data: existing } = await supabase
-        .from("ladder_prizes")
-        .select("id")
-        .ilike("city", cityFull)
-        .ilike("state", stateUp)
-        .eq("month_key", monthKey)
-        .eq("place", place)
-        .maybeSingle();
-
-      const payload = {
-        city: cityFull,
-        state: stateUp,
-        month_key: monthKey,
-        place,
-        title: title.trim() || null,
-        description: description.trim() || null,
-        ...(imageUrl ? { image_url: imageUrl } : {}),
-        updated_at: new Date().toISOString(),
-      };
-
-      if (existing) {
-        const { error } = await supabase
-          .from("ladder_prizes")
-          .update(payload)
-          .eq("id", existing.id);
-        if (error) throw new Error(error.message);
-      } else {
-        const { error } = await supabase
-          .from("ladder_prizes")
-          .insert(payload);
-        if (error) throw new Error(error.message);
-      }
-
-      setTitle("");
-      setDescription("");
-      setImageFile(null);
-      if (imageRef.current) imageRef.current.value = "";
-      router.refresh();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed to save prize");
-    } finally {
-      setBusy(false);
+    // Look up sponsor_id from sponsorship to delete it after
+    let sponsorId: string | null = null;
+    if (sponsorshipId) {
+      const sp = sponsorships.find((s) => s.id === sponsorshipId);
+      if (sp) sponsorId = sp.sponsor_id;
     }
-  }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this prize?")) return;
-    const supabase = createClient();
-    const { error } = await supabase
+    // Delete sponsorship row
+    if (sponsorshipId) {
+      const { error: e1 } = await supabase
+        .from("sponsorships")
+        .delete()
+        .eq("id", sponsorshipId);
+      if (e1) {
+        alert(`Sponsorship delete failed: ${e1.message}`);
+        return;
+      }
+    }
+    // Delete prize row
+    const { error: e2 } = await supabase
       .from("ladder_prizes")
       .delete()
-      .eq("id", id);
-    if (error) {
-      alert(error.message);
+      .ilike("city", city)
+      .ilike("state", state)
+      .eq("month_key", month)
+      .eq("place", slot);
+    if (e2) {
+      alert(`Prize delete failed: ${e2.message}`);
       return;
+    }
+    // Delete sponsor row (since each entry creates its own)
+    if (sponsorId) {
+      await supabase.from("sponsors").delete().eq("id", sponsorId);
     }
     router.refresh();
   }
 
+  // ============================================================
+  // Render
+  // ============================================================
   return (
-    <section>
-      <h2 className="font-display text-display-md font-extrabold text-pickle">
-        Prizes
-      </h2>
-      <p className="mt-1 text-sm text-white/60">
-        Set 1st, 2nd, and 3rd place prizes per city + month. Each prize can
-        have a title, description, and image (any combination). Submitting
-        again for the same place updates the existing prize.
-      </p>
+    <div className="mt-8 space-y-10">
+      {/* Form */}
+      <section>
+        <h2 className="font-display text-display-md font-extrabold text-pickle">
+          Add a sponsor + prize
+        </h2>
+        <p className="mt-1 text-sm text-white/60">
+          One sponsor brings the prize for one place (1st / 2nd / 3rd) in a
+          city for a month. Max three per city per month.
+        </p>
 
-      <form
-        onSubmit={handleSubmit}
-        className="mt-4 grid gap-3 rounded-2xl border-2 border-pickle/40 bg-white/[0.02] p-4 sm:grid-cols-3"
-      >
-        <Field label="City *">
-          <select
-            value={cityKey}
-            onChange={(e) => setCityKey(e.target.value)}
-            required
-            className="input"
-          >
-            <option value="">— pick city —</option>
-            {cityOptions.map((c) => (
-              <option
-                key={`${c.state}-${c.city}`}
-                value={`${c.state.toUpperCase()}::${c.city.toLowerCase()}`}
-              >
-                {c.city}, {c.state}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Month *">
-          <select
-            value={monthKey}
-            onChange={(e) => setMonthKey(e.target.value)}
-            className="input"
-          >
-            {monthOptions.map((m) => (
-              <option key={m} value={m}>
-                {monthLabel(m)}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Place *">
-          <select
-            value={place}
-            onChange={(e) => setPlace(Number(e.target.value))}
-            className="input"
-          >
-            <option value={1}>1st</option>
-            <option value={2}>2nd</option>
-            <option value={3}>3rd</option>
-          </select>
-        </Field>
-
-        <Field label="Title" full>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="input"
-            placeholder="e.g. Selkirk Vanguard Paddle"
-          />
-        </Field>
-        <Field label="Image (optional)">
-          <input
-            ref={imageRef}
-            type="file"
-            accept="image/*"
-            onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-            className="input"
-          />
-        </Field>
-
-        <Field label="Description" full>
-          <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="input"
-            placeholder="$200 retail · pick up at the shop"
-          />
-        </Field>
-
-        <div className="sm:col-span-3">
-          <button
-            type="submit"
-            disabled={busy || !cityKey}
-            className="rounded-lg bg-pickle px-4 py-2 font-display text-display-xs font-bold uppercase tracking-wide text-black disabled:opacity-50"
-          >
-            {busy ? "Saving…" : "Save prize"}
-          </button>
-          {err && <span className="ml-3 text-sm text-bright">⚠ {err}</span>}
-        </div>
-      </form>
-
-      <div className="mt-6 overflow-hidden rounded-2xl border-2 border-pickle">
-        <table className="w-full border-collapse text-sm">
-          <thead className="bg-pickle text-black">
-            <tr>
-              <Th>Month</Th>
-              <Th>City</Th>
-              <Th>Place</Th>
-              <Th>Image</Th>
-              <Th>Title</Th>
-              <Th>Description</Th>
-              <Th>Actions</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {prizes.length === 0 && (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-8 text-center text-white/50"
+        <form
+          onSubmit={handleSubmit}
+          className="mt-4 grid gap-3 rounded-2xl border-2 border-pickle/40 bg-white/[0.02] p-4 sm:grid-cols-3"
+        >
+          {/* Where + when + place */}
+          <Field label="City *">
+            <select
+              value={cityKey}
+              onChange={(e) => setCityKey(e.target.value)}
+              required
+              className="input"
+            >
+              <option value="">— pick city —</option>
+              {cityOptions.map((c) => (
+                <option
+                  key={`${c.state}-${c.city}`}
+                  value={`${c.state.toUpperCase()}::${c.city.toLowerCase()}`}
                 >
-                  No prizes yet.
-                </td>
-              </tr>
-            )}
-            {prizes.map((p) => (
-              <tr key={p.id} className="border-t-2 border-pickle/30">
-                <Td>
-                  <span className="font-mono text-xs text-white/80">
-                    {monthLabel(p.month_key)}
-                  </span>
-                </Td>
-                <Td>
-                  <span className="text-white">
-                    {p.city}, {p.state}
-                  </span>
-                </Td>
-                <Td>
-                  <span className="font-mono text-xs text-pickle">
-                    {p.place === 1 ? "1st" : p.place === 2 ? "2nd" : "3rd"}
-                  </span>
-                </Td>
-                <Td>
-                  {p.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={p.image_url}
-                      alt={p.title ?? ""}
-                      className="h-10 w-16 rounded border-2 border-pickle/40 object-cover"
-                    />
-                  ) : (
-                    <span className="text-white/30">—</span>
-                  )}
-                </Td>
-                <Td>
-                  <span className="text-white">{p.title ?? "—"}</span>
-                </Td>
-                <Td>
-                  <span className="text-xs text-white/70">
-                    {p.description ?? "—"}
-                  </span>
-                </Td>
-                <Td>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(p.id)}
-                    className="rounded-md border border-bright px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-bright hover:bg-bright hover:text-black"
-                  >
-                    Delete
-                  </button>
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+                  {c.city}, {c.state}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Month *">
+            <select
+              value={monthKey}
+              onChange={(e) => setMonthKey(e.target.value)}
+              className="input"
+            >
+              {monthOptions.map((m) => (
+                <option key={m} value={m}>
+                  {monthLabel(m)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Place *">
+            <select
+              value={place}
+              onChange={(e) => setPlace(Number(e.target.value))}
+              className="input"
+            >
+              {[1, 2, 3].map((p) => (
+                <option key={p} value={p} disabled={filledPlaces.has(p)}>
+                  {ordinal(p)} place
+                  {filledPlaces.has(p) ? " (taken)" : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          {/* Sponsor info */}
+          <div className="sm:col-span-3 mt-2 border-t border-white/10 pt-3">
+            <p className="font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
+              Sponsor
+            </p>
+          </div>
+          <Field label="Sponsor name *">
+            <input
+              value={sponsorName}
+              onChange={(e) => setSponsorName(e.target.value)}
+              required
+              className="input"
+              placeholder="e.g. Selkirk Sport"
+            />
+          </Field>
+          <Field label="Website">
+            <input
+              type="url"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              className="input"
+              placeholder="https://…"
+            />
+          </Field>
+          <Field label="Logo (PNG/SVG)">
+            <input
+              ref={logoRef}
+              type="file"
+              accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+              className="input"
+            />
+          </Field>
+          <Field label="Contact email">
+            <input
+              type="email"
+              value={contactEmail}
+              onChange={(e) => setContactEmail(e.target.value)}
+              className="input"
+              placeholder="ops@example.com"
+            />
+          </Field>
+          <Field label="Short description (1 line)" full>
+            <input
+              value={shortDescription}
+              onChange={(e) => setShortDescription(e.target.value)}
+              maxLength={140}
+              className="input"
+              placeholder="Local pickleball pro shop · Las Cruces, NM"
+            />
+          </Field>
+
+          {/* Prize info */}
+          <div className="sm:col-span-3 mt-2 border-t border-white/10 pt-3">
+            <p className="font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
+              Prize
+            </p>
+          </div>
+          <Field label="Prize title">
+            <input
+              value={prizeTitle}
+              onChange={(e) => setPrizeTitle(e.target.value)}
+              className="input"
+              placeholder="e.g. $100 gift card"
+            />
+          </Field>
+          <Field label="Prize description" full>
+            <input
+              value={prizeDescription}
+              onChange={(e) => setPrizeDescription(e.target.value)}
+              className="input"
+              placeholder="Pickup at the shop · expires Dec 31"
+            />
+          </Field>
+          <Field label="Prize image (optional)">
+            <input
+              ref={prizeImageRef}
+              type="file"
+              accept="image/*"
+              onChange={(e) => setPrizeImageFile(e.target.files?.[0] ?? null)}
+              className="input"
+            />
+          </Field>
+
+          {/* Amount */}
+          <div className="sm:col-span-3 mt-2 border-t border-white/10 pt-3">
+            <p className="font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
+              Payment
+            </p>
+          </div>
+          <Field label="Amount paid (USD)">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={amountDollars}
+              onChange={(e) => setAmountDollars(e.target.value)}
+              className="input"
+              placeholder="e.g. 99.00"
+            />
+          </Field>
+
+          <div className="sm:col-span-3">
+            <button
+              type="submit"
+              disabled={busy || !cityKey || !sponsorName.trim()}
+              className="rounded-lg bg-pickle px-4 py-2 font-display text-display-xs font-bold uppercase tracking-wide text-black disabled:opacity-50"
+            >
+              {busy ? "Saving…" : "Save sponsor + prize"}
+            </button>
+            {err && <span className="ml-3 text-sm text-bright">⚠ {err}</span>}
+          </div>
+        </form>
+      </section>
+
+      {/* Existing entries grouped by city + month */}
+      <section>
+        <h2 className="font-display text-display-md font-extrabold text-pickle">
+          Existing sponsors
+        </h2>
+        {grouped.length === 0 ? (
+          <p className="mt-2 text-sm text-white/50">
+            No sponsors added yet. Use the form above to add the first one.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {grouped.map((g) => {
+              const k = `${g.monthKey}-${g.state}-${g.city}`;
+              return (
+                <div
+                  key={k}
+                  className="rounded-2xl border-2 border-pickle/40 bg-white/[0.02] p-4"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="font-display text-display-base font-extrabold text-bright">
+                      {g.city}, {g.state}
+                    </h3>
+                    <p className="font-mono text-xs uppercase tracking-wider text-pickle">
+                      {monthLabel(g.monthKey)}
+                    </p>
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    {[1, 2, 3].map((p) => {
+                      const slot = g.slots[p];
+                      const filled = !!(
+                        slot.sponsorshipId || slot.prizeTitle
+                      );
+                      return (
+                        <div
+                          key={p}
+                          className={`rounded-xl border-2 p-3 ${
+                            filled
+                              ? "border-pickle/40 bg-pickle/5"
+                              : "border-white/15 bg-black/30"
+                          }`}
+                        >
+                          <p className="font-display text-[10px] uppercase font-extrabold tracking-widest text-pickle">
+                            {ordinal(p)} place
+                          </p>
+                          {filled ? (
+                            <>
+                              <div className="mt-2 flex items-start gap-2">
+                                {slot.sponsorLogo ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={slot.sponsorLogo}
+                                    alt=""
+                                    className="h-8 w-8 rounded border-2 border-pickle/40 bg-white object-contain p-0.5"
+                                  />
+                                ) : (
+                                  <div className="h-8 w-8 rounded border-2 border-white/20 bg-black" />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate font-display text-display-xs font-bold text-white">
+                                    {slot.sponsorName ?? "—"}
+                                  </p>
+                                  {slot.prizeTitle && (
+                                    <p className="mt-0.5 truncate text-xs text-white/70">
+                                      {slot.prizeTitle}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeleteSlot(
+                                    g.city,
+                                    g.state,
+                                    g.monthKey,
+                                    p,
+                                    slot.sponsorshipId,
+                                  )
+                                }
+                                className="mt-3 rounded border border-bright px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-bright hover:bg-bright hover:text-black"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCityKey(
+                                  `${g.state.toUpperCase()}::${g.city.toLowerCase()}`,
+                                );
+                                setMonthKey(g.monthKey);
+                                setPlace(p);
+                                window.scrollTo({ top: 0, behavior: "smooth" });
+                              }}
+                              className="mt-2 text-xs uppercase tracking-wider text-pickle hover:text-bright"
+                            >
+                              + Add to this slot
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Sponsors-only list (unbound to a sponsorship) — kept for reference */}
+        {sponsors.length > 0 && (
+          <details className="mt-6 rounded-xl border-2 border-white/15 bg-white/[0.02] p-3">
+            <summary className="cursor-pointer font-display text-display-xs uppercase font-bold tracking-widest text-white/60">
+              Raw sponsor table ({sponsors.length})
+            </summary>
+            <ul className="mt-3 space-y-1 text-xs text-white/70">
+              {sponsors.map((s) => (
+                <li key={s.id} className="font-mono">
+                  {s.name} — {new Date(s.created_at).toLocaleDateString()}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -876,8 +658,21 @@ function PrizesPanel({
 // Helpers
 // ============================================================
 
+function emptySlot(): SlotState {
+  return {
+    sponsorshipId: null,
+    sponsorName: null,
+    sponsorLogo: null,
+    prizeTitle: null,
+    prizeImageUrl: null,
+  };
+}
+
+function ordinal(n: number): string {
+  return n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : `${n}th`;
+}
+
 function buildMonthOptions(): string[] {
-  // Returns last 1 month + current + next 6 months in YYYY-MM
   const out: string[] = [];
   const now = new Date();
   for (let offset = -1; offset <= 6; offset++) {
@@ -908,15 +703,4 @@ function Field({
       {children}
     </label>
   );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th className="px-3 py-3 text-left font-display text-display-xs uppercase font-extrabold tracking-wide">
-      {children}
-    </th>
-  );
-}
-function Td({ children }: { children: React.ReactNode }) {
-  return <td className="px-3 py-3 align-middle">{children}</td>;
 }
