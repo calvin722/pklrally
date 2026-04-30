@@ -48,6 +48,14 @@ export async function updateSession(request: NextRequest) {
           );
         },
       },
+      // Long-lived cookies so the session survives iOS Safari's
+      // aggressive cleanup heuristics. 1 year matches the browser client.
+      cookieOptions: {
+        maxAge: 60 * 60 * 24 * 365,
+        path: "/",
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      },
     },
   );
 

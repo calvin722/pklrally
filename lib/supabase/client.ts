@@ -21,7 +21,23 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       auth: {
+        // PKCE is more reliable than implicit flow on mobile + in-app browsers
+        flowType: "pkce",
+        persistSession: true,
+        autoRefreshToken: true,
+        // Disable navigator.locks (see header comment)
         lock: async (_name, _acquireTimeout, fn) => fn(),
+      },
+      // Long cookie life so iOS Safari ITP doesn't expire the session
+      // unexpectedly between visits. 1 year is the @supabase/ssr default
+      // — making it explicit here just to be defensive.
+      cookieOptions: {
+        maxAge: 60 * 60 * 24 * 365, // 1 year
+        path: "/",
+        sameSite: "lax",
+        secure: typeof window !== "undefined"
+          ? window.location.protocol === "https:"
+          : true,
       },
     },
   );
