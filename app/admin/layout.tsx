@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentPlayer } from "@/lib/supabase/getCurrentPlayer";
+import Wordmark from "@/components/Wordmark";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +18,9 @@ export default async function AdminLayout({
   return (
     <div className="grid min-h-svh grid-cols-[220px_1fr] bg-black text-white">
       <aside className="border-r-2 border-pickle/40 bg-black p-5">
-        <Link
-          href="/"
-          className="block font-display text-display-lg font-extrabold leading-none text-pickle"
-        >
-          PKL<span className="text-bright">RALLY</span>
+        <Link href="/" className="block">
+          <Wordmark size="md" />
+          <span className="sr-only">PKLRALLY</span>
         </Link>
         <p className="mt-1 mb-8 font-display text-display-xs uppercase font-semibold tracking-wide text-bright">
           Admin

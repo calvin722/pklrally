@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import Wordmark from "@/components/Wordmark";
 
 type Status = "idle" | "sending" | "sent" | "error";
 
@@ -37,11 +38,9 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-svh items-center justify-center bg-black p-4 grid-bg">
       <div className="w-full max-w-md rounded-2xl border-2 border-pickle bg-black p-8 neon-pickle">
-        <Link
-          href="/"
-          className="block font-display text-display-xl font-extrabold leading-none text-pickle"
-        >
-          PKL<span className="text-bright">RALLY</span>
+        <Link href="/" className="block">
+          <Wordmark size="lg" priority />
+          <span className="sr-only">PKLRALLY</span>
         </Link>
         <p className="mt-1 text-sm text-white/60">
           the live pulse of pickleball

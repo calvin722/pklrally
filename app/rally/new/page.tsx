@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPlayer } from "@/lib/supabase/getCurrentPlayer";
 import RallyFlow from "@/components/rally/RallyFlow";
+import Wordmark from "@/components/Wordmark";
 
 export const dynamic = "force-dynamic";
 
@@ -52,11 +53,9 @@ export default async function StartRallyPage() {
   return (
     <main className="min-h-svh bg-black p-4 grid-bg">
       <header className="mx-auto flex max-w-2xl items-center justify-between">
-        <Link
-          href="/"
-          className="font-display text-display-lg font-extrabold leading-none text-pickle"
-        >
-          PKL<span className="text-bright">RALLY</span>
+        <Link href="/" className="block">
+          <Wordmark size="md" />
+          <span className="sr-only">PKLRALLY</span>
         </Link>
         <Link
           href="/"

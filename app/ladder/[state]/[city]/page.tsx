@@ -9,6 +9,7 @@ import {
   type LadderRow,
 } from "@/lib/ladder";
 import Avatar from "@/components/Avatar";
+import Wordmark from "@/components/Wordmark";
 
 export const dynamic = "force-dynamic";
 
@@ -101,11 +102,10 @@ export default async function CityLadderPage({
     <main className="min-h-screen bg-black px-4 pb-24 pt-6 sm:px-6">
       {/* Top nav */}
       <div className="mx-auto flex max-w-3xl items-center justify-between">
-        <Link
-          href="/"
-          className="font-display text-display-xs uppercase font-bold tracking-widest text-pickle hover:text-bright"
-        >
-          ← PKLRALLY
+        <Link href="/" className="inline-flex items-center gap-2 text-pickle hover:opacity-80">
+          <span aria-hidden className="font-display text-display-sm font-bold">←</span>
+          <Wordmark size="xs" />
+          <span className="sr-only">Back to PKLRALLY home</span>
         </Link>
         <Link
           href="/ladder"

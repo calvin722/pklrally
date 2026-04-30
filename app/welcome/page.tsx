@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentPlayer } from "@/lib/supabase/getCurrentPlayer";
 import WelcomeFlow from "@/components/welcome/WelcomeFlow";
+import Wordmark from "@/components/Wordmark";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +13,8 @@ export default async function WelcomePage() {
   return (
     <main className="flex min-h-svh items-center justify-center bg-black p-4 grid-bg">
       <div className="w-full max-w-xl rounded-2xl border-2 border-pickle bg-black p-8 neon-pickle">
-        <h1 className="font-display text-display-xl font-extrabold leading-none text-pickle">
-          PKL<span className="text-bright">RALLY</span>
-        </h1>
+        <Wordmark size="lg" priority />
+        <h1 className="sr-only">PKLRALLY</h1>
         <p className="mt-1 text-sm text-white/60">the live pulse of pickleball</p>
 
         <div className="mt-8">

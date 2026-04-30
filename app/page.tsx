@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import AuthButton from "@/components/AuthButton";
 import StartRallyButton from "@/components/StartRallyButton";
+import Wordmark from "@/components/Wordmark";
 import CityTimeline from "@/components/matches/CityTimeline";
 import CourtLadder from "@/components/courts/CourtLadder";
 import type { CityNode } from "@/lib/types";
@@ -29,9 +30,8 @@ export default function HomePage() {
       {/* Top bar — wordmark + sign-in */}
       <header className="relative z-30 flex items-center justify-between px-4 pt-4">
         <div>
-          <h1 className="font-display text-display-xl font-extrabold leading-none text-pickle">
-            PKL<span className="text-bright">RALLY</span>
-          </h1>
+          <Wordmark size="lg" priority />
+          <h1 className="sr-only">PKLRALLY</h1>
           <p className="mt-1 text-sm text-white/60">
             the live pulse of pickleball
           </p>

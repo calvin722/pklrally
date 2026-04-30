@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentPlayer } from "@/lib/supabase/getCurrentPlayer";
 import SettingsClient from "@/components/settings/SettingsClient";
+import Wordmark from "@/components/Wordmark";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +13,10 @@ export default async function SettingsPage() {
   return (
     <main className="min-h-screen bg-black px-4 pb-24 pt-6 sm:px-6">
       <div className="mx-auto max-w-2xl">
-        <Link
-          href="/"
-          className="font-display text-display-xs uppercase font-bold tracking-widest text-pickle hover:text-bright"
-        >
-          ← PKLRALLY
+        <Link href="/" className="inline-flex items-center gap-2 text-pickle hover:opacity-80">
+          <span aria-hidden className="font-display text-display-sm font-bold">←</span>
+          <Wordmark size="xs" />
+          <span className="sr-only">Back to PKLRALLY home</span>
         </Link>
 
         <header className="mt-8">
