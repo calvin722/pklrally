@@ -1,14 +1,18 @@
 import Link from "next/link";
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { stateName, STATE_NAMES } from "@/lib/states";
+import { stateName } from "@/lib/states";
 import { citySlug } from "@/lib/ladder";
 import Wordmark from "@/components/Wordmark";
 import AuthButton from "@/components/AuthButton";
 
+// Always render on-demand. cookies() makes this impossible to pre-build,
+// and we don't need static-generation for these pages anyway.
+export const dynamic = "force-dynamic";
+
 // Map is client-only (uses ZoomableGroup which depends on document)
-const StateMap = dynamic(() => import("@/components/StateMap"), {
+const StateMap = nextDynamic(() => import("@/components/StateMap"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full w-full items-center justify-center bg-black">
@@ -18,8 +22,6 @@ const StateMap = dynamic(() => import("@/components/StateMap"), {
     </div>
   ),
 });
-
-export const dynamicParams = true;
 
 interface PageProps {
   params: Promise<{ state: string }>;
@@ -171,7 +173,3 @@ export default async function StatePage({ params }: PageProps) {
   );
 }
 
-// Pre-build pages for any state with at least one court — others 404.
-export async function generateStaticParams() {
-  return Object.keys(STATE_NAMES).map((code) => ({ state: code.toLowerCase() }));
-}
