@@ -45,12 +45,23 @@ export default async function CityLadderPage({
 }: PageProps) {
   const { state: stateSlug, city: cityParam } = await params;
   const { month } = await searchParams;
-
-  const monthKey = month ?? currentMonthKey();
   const cityName = titleCase(unslugCity(cityParam));
   const stateUpper = stateSlug.toUpperCase();
 
   const supabase = await createClient();
+
+  // Default month respects the league_month_override admin setting
+  // (migration 0025) so the page can show May's ladder before May 1.
+  let defaultMonth = currentMonthKey();
+  try {
+    const { data: leagueMonth } = await supabase.rpc(
+      "current_league_month_key",
+    );
+    if (typeof leagueMonth === "string") defaultMonth = leagueMonth;
+  } catch {
+    /* fall back to calendar month */
+  }
+  const monthKey = month ?? defaultMonth;
 
   // Validate the city actually exists (has at least one court). This
   // prevents random /ladder/zz/nowheresville URLs from rendering.

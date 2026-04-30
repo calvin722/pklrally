@@ -18,7 +18,15 @@ interface CityRow {
  */
 export default async function LadderIndexPage() {
   const supabase = await createClient();
-  const monthKey = currentMonthKey();
+  let monthKey = currentMonthKey();
+  try {
+    const { data: leagueMonth } = await supabase.rpc(
+      "current_league_month_key",
+    );
+    if (typeof leagueMonth === "string") monthKey = leagueMonth;
+  } catch {
+    /* fall back to calendar month */
+  }
 
   const { data: courtsRaw } = await supabase
     .from("courts")
