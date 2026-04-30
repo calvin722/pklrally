@@ -1,27 +1,14 @@
 import Link from "next/link";
-import nextDynamic from "next/dynamic";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { stateName } from "@/lib/states";
 import { citySlug } from "@/lib/ladder";
 import Wordmark from "@/components/Wordmark";
 import AuthButton from "@/components/AuthButton";
+import StateMapWrapper from "@/components/StateMapWrapper";
 
-// Always render on-demand. cookies() makes this impossible to pre-build,
-// and we don't need static-generation for these pages anyway.
+// Always render on-demand. cookies() makes this impossible to pre-build.
 export const dynamic = "force-dynamic";
-
-// Map is client-only (uses ZoomableGroup which depends on document)
-const StateMap = nextDynamic(() => import("@/components/StateMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-full w-full items-center justify-center bg-black">
-      <span className="font-display text-display-sm uppercase font-semibold tracking-wide text-pickle animate-flicker">
-        Loading map...
-      </span>
-    </div>
-  ),
-});
 
 interface PageProps {
   params: Promise<{ state: string }>;
@@ -138,7 +125,7 @@ export default async function StatePage({ params }: PageProps) {
         </aside>
 
         <div className="relative flex-1">
-          <StateMap stateCode={code} />
+          <StateMapWrapper stateCode={code} />
         </div>
       </div>
 
