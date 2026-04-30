@@ -2,6 +2,7 @@
 
 import PlayerSlot from "./PlayerSlot";
 import type { PlayerSlot as PlayerSlotData } from "@/lib/rally";
+import { useTheme } from "@/components/ThemeProvider";
 
 export type SlotId = "server_p1" | "server_p2" | "receiver_p1" | "receiver_p2";
 
@@ -49,6 +50,17 @@ export default function CourtCanvas({
   onScoreChange,
   excludeIds,
 }: CourtCanvasProps) {
+  const theme = useTheme();
+  const isLight = theme === "light";
+
+  // Theme-aware court palette. Real outdoor pickleball courts run from
+  // bright sky-blue with terra-cotta kitchens (light mode here) to the
+  // moody deep navy + dark clay arcade vibe (dark mode).
+  const surfaceColor = isLight ? "#7BB3DD" : "#0a2540";
+  const kitchenColor = isLight ? "#E8A88C" : "#7a4136";
+  const lineColor = isLight ? "#FFFFFF" : "#FFFFFF";
+  const netBg = isLight ? "#52525B" : "#000000";
+
   return (
     <div className="rounded-2xl border-2 border-pickle bg-black p-3 neon-pickle">
       <div className="mb-2 flex items-center justify-between px-1">
@@ -60,16 +72,19 @@ export default function CourtCanvas({
         </span>
       </div>
 
-      {/* Court frame — white outer boundary, blue playing surface */}
-      <div className="overflow-hidden border-2 border-white bg-[#0a2540]">
+      {/* Court frame — white outer boundary, theme-aware playing surface */}
+      <div
+        className="overflow-hidden border-2"
+        style={{ borderColor: lineColor, backgroundColor: surfaceColor }}
+      >
         {/* === TOP HALF — serving team === */}
 
         {/* Back service courts (15 ft) — 2 boxes split by white center line */}
         <div
-          className="grid grid-cols-2 border-b-2 border-white"
-          style={{ minHeight: "200px" }}
+          className="grid grid-cols-2 border-b-2"
+          style={{ minHeight: "200px", borderColor: lineColor }}
         >
-          <div className="border-r-2 border-white p-3">
+          <div className="border-r-2 p-3" style={{ borderColor: lineColor }}>
             <PlayerSlot
               value={serverP1}
               isActive={activeSlot === "server_p1"}
@@ -104,10 +119,11 @@ export default function CourtCanvas({
           score={serverScore}
           onChange={(v) => onScoreChange("server", v)}
           team="serving"
+          bgColor={kitchenColor}
         />
 
         {/* Net */}
-        <NetBar />
+        <NetBar bgColor={netBg} />
 
         {/* === BOTTOM HALF — receiving team === */}
 
@@ -117,14 +133,15 @@ export default function CourtCanvas({
           score={receiverScore}
           onChange={(v) => onScoreChange("receiver", v)}
           team="receiving"
+          bgColor={kitchenColor}
         />
 
         {/* Back service courts (15 ft) */}
         <div
-          className="grid grid-cols-2 border-t-2 border-white"
-          style={{ minHeight: "200px" }}
+          className="grid grid-cols-2 border-t-2"
+          style={{ minHeight: "200px", borderColor: lineColor }}
         >
-          <div className="border-r-2 border-white p-3">
+          <div className="border-r-2 p-3" style={{ borderColor: lineColor }}>
             <PlayerSlot
               value={receiverP1}
               isActive={activeSlot === "receiver_p1"}
@@ -171,21 +188,22 @@ interface KitchenZoneProps {
   score: number;
   onChange: (next: number) => void;
   team: "serving" | "receiving";
+  bgColor: string;
 }
 
 /**
  * Non-volley zone (kitchen) — 7 ft deep, full court width.
  * Holds the team's final score.
  */
-function KitchenZone({ accent, score, onChange, team }: KitchenZoneProps) {
+function KitchenZone({ accent, score, onChange, team, bgColor }: KitchenZoneProps) {
   const accentColor = accent === "pickle" ? "text-pickle" : "text-electric";
   const accentBorder =
     accent === "pickle" ? "border-pickle" : "border-electric";
 
   return (
     <div
-      className="flex items-center justify-between gap-3 bg-[#7a4136] px-4 py-3"
-      style={{ minHeight: "95px" }}
+      className="flex items-center justify-between gap-3 px-4 py-3"
+      style={{ minHeight: "95px", backgroundColor: bgColor }}
       aria-label={`${team} final score`}
     >
       <span
@@ -222,9 +240,13 @@ function KitchenZone({ accent, score, onChange, team }: KitchenZoneProps) {
 }
 
 /** The net — horizontal mesh band between the two kitchens. */
-function NetBar() {
+function NetBar({ bgColor }: { bgColor: string }) {
   return (
-    <div className="relative h-3 bg-black" aria-hidden>
+    <div
+      className="relative h-3"
+      style={{ backgroundColor: bgColor }}
+      aria-hidden
+    >
       <div
         className="absolute inset-0"
         style={{
@@ -232,8 +254,14 @@ function NetBar() {
             "repeating-linear-gradient(90deg, rgba(255,255,255,0.7) 0 1px, transparent 1px 4px)",
         }}
       />
-      <div className="absolute left-0 right-0 top-0 h-[2px] bg-white" />
-      <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-white" />
+      <div
+        className="absolute left-0 right-0 top-0 h-[2px]"
+        style={{ backgroundColor: "#FFFFFF" }}
+      />
+      <div
+        className="absolute left-0 right-0 bottom-0 h-[2px]"
+        style={{ backgroundColor: "#FFFFFF" }}
+      />
     </div>
   );
 }

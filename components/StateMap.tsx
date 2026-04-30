@@ -143,10 +143,17 @@ export default function StateMap({ stateCode }: StateMapProps) {
           {cities.map((city) => {
             const key = `${city.city}-${city.state}`;
             const isHovered = hoveredCity === key;
-            const r = Math.min(
+            // The whole ZoomableGroup is scaled by view.zoom, so SVG sizes
+            // need to be divided by zoom to render at consistent pixel size.
+            const z = view.zoom;
+            const baseR = Math.min(
               7,
               Math.max(4, 3 + city.recentMatches / 40),
             );
+            const r = baseR / z;
+            const fontSize = 11 / z;
+            const labelGap = 5 / z;
+            const labelStrokeWidth = 3 / z;
             const isPrivate = city.hasPrivate;
             const buzzClass = city.buzzing
               ? isPrivate
@@ -183,22 +190,22 @@ export default function StateMap({ stateCode }: StateMapProps) {
                     r={r}
                     fill={dotFill}
                     stroke={colors.dotStroke}
-                    strokeWidth={1}
+                    strokeWidth={1 / z}
                   />
                 </g>
                 <text
-                  x={r + 5}
-                  y={4}
+                  x={r + labelGap}
+                  y={fontSize / 3}
                   textAnchor="start"
                   fill={colors.labelFill}
                   style={{
                     fontFamily:
                       "var(--font-display), system-ui, sans-serif",
                     fontWeight: 700,
-                    fontSize: 11,
+                    fontSize,
                     paintOrder: "stroke",
                     stroke: colors.labelStroke,
-                    strokeWidth: 3,
+                    strokeWidth: labelStrokeWidth,
                     strokeLinejoin: "round",
                     pointerEvents: "none",
                     opacity: city.buzzing || isHovered ? 1 : 0.85,
