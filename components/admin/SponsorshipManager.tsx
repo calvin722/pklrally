@@ -55,10 +55,27 @@ interface Props {
 
 interface SlotState {
   sponsorshipId: string | null;
+  sponsorId: string | null;
   sponsorName: string | null;
   sponsorLogo: string | null;
+  sponsorWebsite: string | null;
+  sponsorContactEmail: string | null;
+  sponsorShortDescription: string | null;
+  amountCents: number | null;
+  prizeId: string | null;
   prizeTitle: string | null;
+  prizeDescription: string | null;
   prizeImageUrl: string | null;
+}
+
+interface EditingState {
+  sponsorshipId: string;
+  sponsorId: string;
+  prizeId: string | null;
+  city: string;
+  state: string;
+  monthKey: string;
+  place: number;
 }
 
 /**
@@ -95,6 +112,12 @@ export default function SponsorshipManager({
   const [amountDollars, setAmountDollars] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // When editing, the existing logo + prize image URLs are kept unless
+  // the user picks new files.
+  const [editing, setEditing] = useState<EditingState | null>(null);
+  const [existingLogoUrl, setExistingLogoUrl] = useState<string | null>(null);
+  const [existingPrizeImageUrl, setExistingPrizeImageUrl] = useState<string | null>(null);
 
   // ============================================================
   // Build a (city, month) → 3-slot view of existing entries
@@ -133,13 +156,20 @@ export default function SponsorshipManager({
       const entry = ensure(sp.city, sp.state, sp.month_key);
       const slot = entry.slots[sp.slot];
       slot.sponsorshipId = sp.id;
+      slot.sponsorId = sp.sponsor_id;
       slot.sponsorName = sponsor?.name ?? null;
       slot.sponsorLogo = sponsor?.logo_url ?? null;
+      slot.sponsorWebsite = sponsor?.website ?? null;
+      slot.sponsorContactEmail = sponsor?.contact_email ?? null;
+      slot.sponsorShortDescription = sponsor?.short_description ?? null;
+      slot.amountCents = sp.amount_paid_cents ?? null;
     }
     for (const pr of prizes) {
       const entry = ensure(pr.city, pr.state, pr.month_key);
       const slot = entry.slots[pr.place];
+      slot.prizeId = pr.id;
       slot.prizeTitle = pr.title;
+      slot.prizeDescription = pr.description;
       slot.prizeImageUrl = pr.image_url;
     }
 
@@ -199,9 +229,58 @@ export default function SponsorshipManager({
     setPrizeDescription("");
     setPrizeImageFile(null);
     setAmountDollars("");
+    setExistingLogoUrl(null);
+    setExistingPrizeImageUrl(null);
     if (logoRef.current) logoRef.current.value = "";
     if (prizeImageRef.current) prizeImageRef.current.value = "";
     setErr(null);
+  }
+
+  function exitEditMode() {
+    setEditing(null);
+    resetForm();
+  }
+
+  function startEdit(
+    city: string,
+    state: string,
+    monthKeyValue: string,
+    p: number,
+    slot: SlotState,
+  ) {
+    if (!slot.sponsorshipId || !slot.sponsorId) return;
+    setEditing({
+      sponsorshipId: slot.sponsorshipId,
+      sponsorId: slot.sponsorId,
+      prizeId: slot.prizeId,
+      city,
+      state,
+      monthKey: monthKeyValue,
+      place: p,
+    });
+    // Pre-fill form
+    setCityKey(`${state.toUpperCase()}::${city.toLowerCase()}`);
+    setMonthKey(monthKeyValue);
+    setPlace(p);
+    setSponsorName(slot.sponsorName ?? "");
+    setWebsite(slot.sponsorWebsite ?? "");
+    setContactEmail(slot.sponsorContactEmail ?? "");
+    setShortDescription(slot.sponsorShortDescription ?? "");
+    setLogoFile(null);
+    setExistingLogoUrl(slot.sponsorLogo);
+    setPrizeTitle(slot.prizeTitle ?? "");
+    setPrizeDescription(slot.prizeDescription ?? "");
+    setPrizeImageFile(null);
+    setExistingPrizeImageUrl(slot.prizeImageUrl);
+    setAmountDollars(
+      slot.amountCents != null ? (slot.amountCents / 100).toFixed(2) : "",
+    );
+    setErr(null);
+    if (logoRef.current) logoRef.current.value = "";
+    if (prizeImageRef.current) prizeImageRef.current.value = "";
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   }
 
   // ============================================================
@@ -214,11 +293,15 @@ export default function SponsorshipManager({
     try {
       if (!cityKey) throw new Error("Choose a city");
       if (!sponsorName.trim()) throw new Error("Sponsor name is required");
-      if (filledPlaces.has(place)) {
+
+      // Only enforce "place taken" for NEW entries. When editing, the slot is
+      // already taken by the entry we're updating.
+      if (!editing && filledPlaces.has(place)) {
         throw new Error(
           `${ordinal(place)} place is already taken for this city + month. Delete the existing one first.`,
         );
       }
+
       const [stateUp, cityLower] = cityKey.split("::");
       const cityFull =
         cityOptions.find(
@@ -227,15 +310,76 @@ export default function SponsorshipManager({
             c.city.toLowerCase() === cityLower,
         )?.city ?? cityLower;
 
-      let logoUrl: string | null = null;
+      // Upload new files only if user picked them; otherwise keep existing URLs
+      let logoUrl: string | null = existingLogoUrl;
       if (logoFile) logoUrl = await uploadFile(logoFile, "logos");
 
-      let prizeImageUrl: string | null = null;
+      let prizeImageUrl: string | null = existingPrizeImageUrl;
       if (prizeImageFile)
         prizeImageUrl = await uploadFile(prizeImageFile, "prizes");
 
       const supabase = createClient();
+      const amountCents = amountDollars
+        ? Math.round(Number(amountDollars) * 100)
+        : null;
 
+      if (editing) {
+        // ============= EDIT MODE =============
+        // Update sponsor row
+        const { error: sponsorErr } = await supabase
+          .from("sponsors")
+          .update({
+            name: sponsorName.trim(),
+            website: website.trim() || null,
+            contact_email: contactEmail.trim() || null,
+            short_description: shortDescription.trim() || null,
+            logo_url: logoUrl,
+          })
+          .eq("id", editing.sponsorId);
+        if (sponsorErr) throw new Error(`Sponsor: ${sponsorErr.message}`);
+
+        // Update sponsorship row (only amount_paid_cents — city/month/slot
+        // are locked during edit)
+        const { error: spErr } = await supabase
+          .from("sponsorships")
+          .update({ amount_paid_cents: amountCents })
+          .eq("id", editing.sponsorshipId);
+        if (spErr) throw new Error(`Sponsorship: ${spErr.message}`);
+
+        // Update or insert the prize
+        const prizePayload = {
+          city: cityFull,
+          state: stateUp,
+          month_key: monthKey,
+          place,
+          title: prizeTitle.trim() || null,
+          description: prizeDescription.trim() || null,
+          image_url: prizeImageUrl,
+        };
+
+        if (editing.prizeId) {
+          const { error: prizeErr } = await supabase
+            .from("ladder_prizes")
+            .update(prizePayload)
+            .eq("id", editing.prizeId);
+          if (prizeErr) throw new Error(`Prize: ${prizeErr.message}`);
+        } else if (
+          prizeTitle.trim() ||
+          prizeDescription.trim() ||
+          prizeImageUrl
+        ) {
+          const { error: prizeErr } = await supabase
+            .from("ladder_prizes")
+            .insert(prizePayload);
+          if (prizeErr) throw new Error(`Prize: ${prizeErr.message}`);
+        }
+
+        exitEditMode();
+        router.refresh();
+        return;
+      }
+
+      // ============= CREATE MODE =============
       // 1. Create sponsor row
       const { data: sponsorRow, error: sponsorErr } = await supabase
         .from("sponsors")
@@ -249,10 +393,6 @@ export default function SponsorshipManager({
         .select("id")
         .single();
       if (sponsorErr) throw new Error(`Sponsor: ${sponsorErr.message}`);
-
-      const amountCents = amountDollars
-        ? Math.round(Number(amountDollars) * 100)
-        : null;
 
       // 2. Create sponsorship binding
       const { error: spErr } = await supabase.from("sponsorships").insert({
@@ -350,12 +490,24 @@ export default function SponsorshipManager({
     <div className="mt-8 space-y-10">
       {/* Form */}
       <section>
-        <h2 className="font-display text-display-md font-extrabold text-pickle">
-          Add a sponsor + prize
-        </h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-display text-display-md font-extrabold text-pickle">
+            {editing ? "Edit sponsor + prize" : "Add a sponsor + prize"}
+          </h2>
+          {editing && (
+            <button
+              type="button"
+              onClick={exitEditMode}
+              className="font-display text-display-xs uppercase font-semibold tracking-wide text-white/60 hover:text-pickle"
+            >
+              ◀ Cancel edit
+            </button>
+          )}
+        </div>
         <p className="mt-1 text-sm text-white/60">
-          One sponsor brings the prize for one place (1st / 2nd / 3rd) in a
-          city for a month. Max three per city per month.
+          {editing
+            ? `Editing ${editing.city}, ${editing.state} · ${monthLabel(editing.monthKey)} · ${ordinal(editing.place)} place. City, month, and place are locked during edit — delete and re-add to move a sponsor.`
+            : "One sponsor brings the prize for one place (1st / 2nd / 3rd) in a city for a month. Max three per city per month."}
         </p>
 
         <form
@@ -368,7 +520,8 @@ export default function SponsorshipManager({
               value={cityKey}
               onChange={(e) => setCityKey(e.target.value)}
               required
-              className="input"
+              disabled={!!editing}
+              className="input disabled:opacity-60"
             >
               <option value="">— pick city —</option>
               {cityOptions.map((c) => (
@@ -385,7 +538,8 @@ export default function SponsorshipManager({
             <select
               value={monthKey}
               onChange={(e) => setMonthKey(e.target.value)}
-              className="input"
+              disabled={!!editing}
+              className="input disabled:opacity-60"
             >
               {monthOptions.map((m) => (
                 <option key={m} value={m}>
@@ -398,12 +552,17 @@ export default function SponsorshipManager({
             <select
               value={place}
               onChange={(e) => setPlace(Number(e.target.value))}
-              className="input"
+              disabled={!!editing}
+              className="input disabled:opacity-60"
             >
               {[1, 2, 3].map((p) => (
-                <option key={p} value={p} disabled={filledPlaces.has(p)}>
+                <option
+                  key={p}
+                  value={p}
+                  disabled={!editing && filledPlaces.has(p)}
+                >
                   {ordinal(p)} place
-                  {filledPlaces.has(p) ? " (taken)" : ""}
+                  {!editing && filledPlaces.has(p) ? " (taken)" : ""}
                 </option>
               ))}
             </select>
@@ -433,14 +592,24 @@ export default function SponsorshipManager({
               placeholder="https://…"
             />
           </Field>
-          <Field label="Logo (PNG/SVG)">
-            <input
-              ref={logoRef}
-              type="file"
-              accept="image/png,image/jpeg,image/svg+xml,image/webp"
-              onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
-              className="input"
-            />
+          <Field label={editing && existingLogoUrl ? "Logo (replace?)" : "Logo (PNG/SVG)"}>
+            <div className="flex items-center gap-2">
+              {existingLogoUrl && !logoFile && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={existingLogoUrl}
+                  alt="current logo"
+                  className="h-10 w-10 shrink-0 rounded border-2 border-pickle bg-white object-contain p-0.5"
+                />
+              )}
+              <input
+                ref={logoRef}
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+                className="input"
+              />
+            </div>
           </Field>
           <Field label="Contact email">
             <input
@@ -483,14 +652,30 @@ export default function SponsorshipManager({
               placeholder="Pickup at the shop · expires Dec 31"
             />
           </Field>
-          <Field label="Prize image (optional)">
-            <input
-              ref={prizeImageRef}
-              type="file"
-              accept="image/*"
-              onChange={(e) => setPrizeImageFile(e.target.files?.[0] ?? null)}
-              className="input"
-            />
+          <Field
+            label={
+              editing && existingPrizeImageUrl
+                ? "Prize image (replace?)"
+                : "Prize image (optional)"
+            }
+          >
+            <div className="flex items-center gap-2">
+              {existingPrizeImageUrl && !prizeImageFile && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={existingPrizeImageUrl}
+                  alt="current prize"
+                  className="h-10 w-16 shrink-0 rounded border-2 border-pickle/40 object-cover"
+                />
+              )}
+              <input
+                ref={prizeImageRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => setPrizeImageFile(e.target.files?.[0] ?? null)}
+                className="input"
+              />
+            </div>
           </Field>
 
           {/* Amount */}
@@ -511,15 +696,29 @@ export default function SponsorshipManager({
             />
           </Field>
 
-          <div className="sm:col-span-3">
+          <div className="sm:col-span-3 flex flex-wrap items-center gap-3">
             <button
               type="submit"
               disabled={busy || !cityKey || !sponsorName.trim()}
               className="rounded-lg bg-pickle px-4 py-2 font-display text-display-xs font-bold uppercase tracking-wide text-black disabled:opacity-50"
             >
-              {busy ? "Saving…" : "Save sponsor + prize"}
+              {busy
+                ? "Saving…"
+                : editing
+                  ? "Update sponsor + prize"
+                  : "Save sponsor + prize"}
             </button>
-            {err && <span className="ml-3 text-sm text-bright">⚠ {err}</span>}
+            {editing && (
+              <button
+                type="button"
+                onClick={exitEditMode}
+                disabled={busy}
+                className="rounded-lg border-2 border-white/30 px-4 py-2 font-display text-display-xs uppercase font-bold tracking-wide text-white/70 hover:border-pickle hover:text-pickle"
+              >
+                Cancel
+              </button>
+            )}
+            {err && <span className="text-sm text-bright">⚠ {err}</span>}
           </div>
         </form>
       </section>
@@ -592,21 +791,38 @@ export default function SponsorshipManager({
                                   )}
                                 </div>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleDeleteSlot(
-                                    g.city,
-                                    g.state,
-                                    g.monthKey,
-                                    p,
-                                    slot.sponsorshipId,
-                                  )
-                                }
-                                className="mt-3 rounded border border-bright px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-bright hover:bg-bright hover:text-black"
-                              >
-                                Delete
-                              </button>
+                              <div className="mt-3 flex flex-wrap gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    startEdit(
+                                      g.city,
+                                      g.state,
+                                      g.monthKey,
+                                      p,
+                                      slot,
+                                    )
+                                  }
+                                  className="rounded border border-pickle px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-pickle hover:bg-pickle hover:text-black"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDeleteSlot(
+                                      g.city,
+                                      g.state,
+                                      g.monthKey,
+                                      p,
+                                      slot.sponsorshipId,
+                                    )
+                                  }
+                                  className="rounded border border-bright px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-bright hover:bg-bright hover:text-black"
+                                >
+                                  Delete
+                                </button>
+                              </div>
                             </>
                           ) : (
                             <button
@@ -661,9 +877,16 @@ export default function SponsorshipManager({
 function emptySlot(): SlotState {
   return {
     sponsorshipId: null,
+    sponsorId: null,
     sponsorName: null,
     sponsorLogo: null,
+    sponsorWebsite: null,
+    sponsorContactEmail: null,
+    sponsorShortDescription: null,
+    amountCents: null,
+    prizeId: null,
     prizeTitle: null,
+    prizeDescription: null,
     prizeImageUrl: null,
   };
 }

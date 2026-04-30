@@ -150,50 +150,41 @@ export default async function CityLadderPage({
         </p>
       </header>
 
-      {/* Sponsors — 3 slots side-by-side */}
+      {/* Sponsors + prizes paired by place */}
       <section className="mx-auto mt-8 max-w-3xl">
         <p className="mb-3 font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
-          Monthly Sponsors
+          Sponsors &amp; Prizes
         </p>
         <div className="grid gap-3 sm:grid-cols-3">
-          {[1, 2, 3].map((slot) => (
-            <SponsorSlotCard
-              key={slot}
-              slot={slot}
-              data={sponsorshipsBySlot.get(slot) ?? null}
-              cityName={cityName}
-              monthKey={monthKey}
-            />
-          ))}
-        </div>
-      </section>
-
-      {/* Prizes — 1st / 2nd / 3rd */}
-      <section className="mx-auto mt-8 max-w-3xl">
-        <p className="mb-3 font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
-          Prizes
-        </p>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <PrizeSlotCard
+          <SponsorPrizeCard
             place={1}
             label="1st"
-            data={prizesByPlace.get(1) ?? null}
+            sponsorship={sponsorshipsBySlot.get(1) ?? null}
+            prize={prizesByPlace.get(1) ?? null}
             accentBorder="border-bright"
             accentText="text-bright"
+            cityName={cityName}
+            monthKey={monthKey}
           />
-          <PrizeSlotCard
+          <SponsorPrizeCard
             place={2}
             label="2nd"
-            data={prizesByPlace.get(2) ?? null}
+            sponsorship={sponsorshipsBySlot.get(2) ?? null}
+            prize={prizesByPlace.get(2) ?? null}
             accentBorder="border-pickle"
             accentText="text-pickle"
+            cityName={cityName}
+            monthKey={monthKey}
           />
-          <PrizeSlotCard
+          <SponsorPrizeCard
             place={3}
             label="3rd"
-            data={prizesByPlace.get(3) ?? null}
+            sponsorship={sponsorshipsBySlot.get(3) ?? null}
+            prize={prizesByPlace.get(3) ?? null}
             accentBorder="border-electric"
             accentText="text-electric"
+            cityName={cityName}
+            monthKey={monthKey}
           />
         </div>
       </section>
@@ -329,129 +320,138 @@ export default async function CityLadderPage({
 }
 
 /**
- * One sponsor slot in the 3-up grid. Filled = sponsor logo + name +
- * description. Empty = "Slot N open" CTA that emails an inquiry.
+ * Combined sponsor + prize card. Each place (1st/2nd/3rd) shows the
+ * sponsor on top with a large readable logo, and the prize they're
+ * providing for that place below. Empty states still render so the
+ * three-card layout stays consistent.
  */
-function SponsorSlotCard({
-  slot,
-  data,
+function SponsorPrizeCard({
+  place,
+  label,
+  sponsorship,
+  prize,
+  accentBorder,
+  accentText,
   cityName,
   monthKey,
 }: {
-  slot: number;
-  data: SponsorshipRow | null;
+  place: number;
+  label: string;
+  sponsorship: SponsorshipRow | null;
+  prize: PrizeRow | null;
+  accentBorder: string;
+  accentText: string;
   cityName: string;
   monthKey: string;
 }) {
-  const sponsor = data?.sponsor
-    ? Array.isArray(data.sponsor)
-      ? data.sponsor[0]
-      : data.sponsor
+  const sponsor = sponsorship?.sponsor
+    ? Array.isArray(sponsorship.sponsor)
+      ? sponsorship.sponsor[0]
+      : sponsorship.sponsor
     : null;
 
-  if (!sponsor) {
-    const subject = `Sponsor%20${encodeURIComponent(cityName)}%20slot%20${slot}%20${monthKey}`;
+  // Fully-empty state — no sponsor, no prize. Render a CTA card.
+  if (!sponsor && !prize) {
+    const subject = `Sponsor%20${encodeURIComponent(cityName)}%20${label}%20place%20${monthKey}`;
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-white/[0.02] p-4 text-center min-h-[140px]">
-        <p className="font-display text-[10px] uppercase font-bold tracking-widest text-white/40">
-          Slot {slot} · Open
+      <div
+        className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-white/[0.02] p-4 text-center min-h-[180px] ${accentBorder}`}
+      >
+        <p
+          className={`font-display text-[10px] uppercase font-extrabold tracking-widest ${accentText}`}
+        >
+          {label} place · Open
         </p>
         <a
           href={`mailto:hello@pklrally.com?subject=${subject}`}
           className="mt-2 rounded-md border-2 border-pickle px-3 py-1.5 font-display text-[10px] uppercase font-bold tracking-wide text-pickle transition hover:bg-pickle hover:text-black"
         >
-          Become a sponsor
+          Sponsor this place
         </a>
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border-2 border-pickle bg-gradient-to-br from-pickle/10 via-black to-electric/10 p-4">
-      <div className="flex flex-col items-center text-center">
-        {sponsor.logo_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={sponsor.logo_url}
-            alt={sponsor.name}
-            className="h-14 w-14 shrink-0 rounded-xl border-2 border-pickle bg-white object-contain p-1"
-          />
+    <div
+      className={`flex flex-col overflow-hidden rounded-2xl border-2 bg-gradient-to-br from-pickle/10 via-black to-electric/10 ${accentBorder}`}
+    >
+      {/* Place ribbon */}
+      <p
+        className={`px-4 pt-3 font-display text-[10px] uppercase font-extrabold tracking-widest ${accentText}`}
+      >
+        {label} place
+      </p>
+
+      {/* Sponsor block */}
+      <div className="flex flex-col items-center px-4 pt-2 pb-4 text-center">
+        {sponsor ? (
+          <>
+            {sponsor.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={sponsor.logo_url}
+                alt={sponsor.name}
+                className="h-24 w-full max-w-[180px] rounded-xl border-2 border-pickle bg-white object-contain p-2"
+              />
+            ) : (
+              <div className="flex h-24 w-full max-w-[180px] items-center justify-center rounded-xl border-2 border-pickle bg-black">
+                <span className="font-display text-display-xl font-extrabold text-pickle">
+                  {sponsor.name[0]?.toUpperCase()}
+                </span>
+              </div>
+            )}
+            <p className="mt-3 font-display text-display-sm font-extrabold text-white">
+              {sponsor.website ? (
+                <a
+                  href={sponsor.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-pickle hover:underline"
+                >
+                  {sponsor.name}
+                </a>
+              ) : (
+                sponsor.name
+              )}
+            </p>
+            {sponsor.short_description && (
+              <p className="mt-1 text-xs text-white/70">
+                {sponsor.short_description}
+              </p>
+            )}
+          </>
         ) : (
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border-2 border-pickle bg-black">
-            <span className="font-display text-display-base font-extrabold text-pickle">
-              {sponsor.name[0]?.toUpperCase()}
-            </span>
-          </div>
-        )}
-        <p className="mt-2 font-display text-[10px] uppercase font-bold tracking-widest text-pickle">
-          Slot {slot}
-        </p>
-        <p className="mt-0.5 font-display text-display-sm font-extrabold text-white">
-          {sponsor.website ? (
-            <a
-              href={sponsor.website}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-pickle hover:underline"
-            >
-              {sponsor.name}
-            </a>
-          ) : (
-            sponsor.name
-          )}
-        </p>
-        {sponsor.short_description && (
-          <p className="mt-1 text-xs text-white/70">
-            {sponsor.short_description}
-          </p>
+          <p className="text-xs text-white/40">No sponsor yet</p>
         )}
       </div>
-    </div>
-  );
-}
 
-/**
- * Prize slot for 1st / 2nd / 3rd place. Photo and/or text. Empty slots
- * still render so the layout stays consistent — just shows "—" placeholder.
- */
-function PrizeSlotCard({
-  place,
-  label,
-  data,
-  accentBorder,
-  accentText,
-}: {
-  place: number;
-  label: string;
-  data: PrizeRow | null;
-  accentBorder: string;
-  accentText: string;
-}) {
-  return (
-    <div
-      className={`flex flex-col overflow-hidden rounded-2xl border-2 bg-black/40 ${accentBorder}`}
-    >
-      {data?.image_url && (
+      {/* Prize image (if any) */}
+      {prize?.image_url && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={data.image_url}
-          alt={data.title ?? `${label} prize`}
+          src={prize.image_url}
+          alt={prize.title ?? `${label} prize`}
           className="aspect-video w-full object-cover"
         />
       )}
-      <div className="flex flex-1 flex-col p-3">
+
+      {/* Prize text */}
+      <div className="border-t-2 border-white/10 px-4 py-3">
         <p
-          className={`font-display text-[10px] uppercase font-extrabold tracking-widest ${accentText}`}
+          className={`font-display text-[10px] uppercase font-bold tracking-widest ${accentText}`}
         >
-          {label} place
+          {label} place prize
         </p>
-        <p className="mt-1 font-display text-display-sm font-bold text-white">
-          {data?.title || (
-            <span className="text-white/30">No prize set</span>
-          )}
-        </p>
-        {data?.description && (
-          <p className="mt-1 text-xs text-white/70">{data.description}</p>
+        {prize?.title ? (
+          <p className="mt-1 font-display text-display-sm font-bold text-white">
+            {prize.title}
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-white/40">No prize set yet</p>
+        )}
+        {prize?.description && (
+          <p className="mt-1 text-xs text-white/70">{prize.description}</p>
         )}
       </div>
     </div>

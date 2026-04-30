@@ -18,7 +18,7 @@ export default async function AdminSponsorshipsPage() {
     .select(
       `id, sponsor_id, city, state, month_key, status, slot,
        amount_paid_cents, created_at,
-       sponsor:sponsors (id, name, logo_url)`,
+       sponsor:sponsors (id, name, logo_url, website, contact_email, short_description)`,
     )
     .order("month_key", { ascending: false })
     .order("slot", { ascending: true })
