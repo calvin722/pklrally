@@ -1,16 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Wordmark from "@/components/Wordmark";
 
 type Status = "idle" | "sending" | "sent" | "error";
 
-export default function LoginPage() {
+function LoginForm() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Pre-fill email when arriving from an invite link
+  // (?email=foo@bar.com&claim=matchId)
+  useEffect(() => {
+    const fromUrl = searchParams.get("email");
+    if (fromUrl && !email) setEmail(fromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -19,12 +29,22 @@ export default function LoginPage() {
     setStatus("sending");
     setErrorMsg(null);
 
+    // Carry the `next` and `claim` params through the auth flow so the
+    // callback can route the user appropriately after sign-in.
+    const next = searchParams.get("next");
+    const claim = searchParams.get("claim");
+    const redirectParams = new URLSearchParams();
+    if (next) redirectParams.set("next", next);
+    if (claim) redirectParams.set("claim", claim);
+    const redirectQs = redirectParams.toString();
+    const emailRedirectTo = redirectQs
+      ? `${window.location.origin}/auth/callback?${redirectQs}`
+      : `${window.location.origin}/auth/callback`;
+
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { emailRedirectTo },
     });
 
     if (error) {
@@ -101,6 +121,11 @@ export default function LoginPage() {
                 Magic link sent to <span className="text-bright">{email}</span>.
                 Tap the link to sign in. (Check spam if it doesn't show up.)
               </p>
+              <p className="mt-3 text-xs text-white/50">
+                On mobile, the link works best opened in your default browser
+                (Safari / Chrome). Long-press → Open in Safari if it tries to
+                open inside your email app.
+              </p>
             </div>
             <button
               type="button"
@@ -116,5 +141,21 @@ export default function LoginPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-svh items-center justify-center bg-black p-4">
+          <p className="font-display text-display-sm uppercase font-semibold tracking-wide text-pickle animate-flicker">
+            Loading…
+          </p>
+        </main>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -21,8 +21,13 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       auth: {
-        // PKCE is more reliable than implicit flow on mobile + in-app browsers
-        flowType: "pkce",
+        // Use the implicit / token-hash flow for magic links.
+        // PKCE requires the code verifier cookie to persist in the SAME
+        // browser context that initiated sign-in, which breaks when the
+        // invite link opens in an in-app webview (Mail, Gmail app) but
+        // the magic link opens in Safari/Chrome. token_hash + verifyOtp
+        // validates server-side and works across contexts.
+        flowType: "implicit",
         persistSession: true,
         autoRefreshToken: true,
         // Disable navigator.locks (see header comment)
