@@ -16,13 +16,19 @@ export default async function AdminSponsorshipsPage() {
   const { data: sponsorships } = await supabase
     .from("sponsorships")
     .select(
-      `id, sponsor_id, city, state, month_key, status,
-       prize_1_title, prize_2_title, prize_3_title,
-       prize_image_url, amount_paid_cents, created_at,
+      `id, sponsor_id, city, state, month_key, status, slot,
+       amount_paid_cents, created_at,
        sponsor:sponsors (id, name, logo_url)`,
     )
     .order("month_key", { ascending: false })
+    .order("slot", { ascending: true })
     .order("created_at", { ascending: false });
+
+  const { data: prizes } = await supabase
+    .from("ladder_prizes")
+    .select("id, city, state, month_key, place, title, description, image_url, created_at")
+    .order("month_key", { ascending: false })
+    .order("place", { ascending: true });
 
   const { data: cities } = await supabase
     .from("courts")
@@ -65,6 +71,7 @@ export default async function AdminSponsorshipsPage() {
       <SponsorshipManager
         sponsors={sponsors ?? []}
         sponsorships={sponsorships ?? []}
+        prizes={prizes ?? []}
         cityOptions={cityOptions}
       />
 

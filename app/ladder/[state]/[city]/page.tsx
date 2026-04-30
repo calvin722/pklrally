@@ -10,6 +10,7 @@ import {
 } from "@/lib/ladder";
 import Avatar from "@/components/Avatar";
 import Wordmark from "@/components/Wordmark";
+import LadderExplainer from "@/components/ladder/LadderExplainer";
 
 export const dynamic = "force-dynamic";
 
@@ -20,13 +21,7 @@ interface PageProps {
 
 interface SponsorshipRow {
   id: string;
-  prize_1_title: string | null;
-  prize_1_description: string | null;
-  prize_2_title: string | null;
-  prize_2_description: string | null;
-  prize_3_title: string | null;
-  prize_3_description: string | null;
-  prize_image_url: string | null;
+  slot: number;
   sponsor: {
     id: string;
     name: string;
@@ -34,6 +29,14 @@ interface SponsorshipRow {
     website: string | null;
     short_description: string | null;
   } | null;
+}
+
+interface PrizeRow {
+  id: string;
+  place: number;
+  title: string | null;
+  description: string | null;
+  image_url: string | null;
 }
 
 export default async function CityLadderPage({
@@ -74,29 +77,37 @@ export default async function CityLadderPage({
 
   const ladder: LadderRow[] = (ladderData ?? []) as LadderRow[];
 
-  // Pull active sponsorship for the month
-  const { data: sponsorship } = await supabase
+  // Pull all active sponsorships for the month (up to 3 slots)
+  const { data: sponsorshipRows } = await supabase
     .from("sponsorships")
     .select(
-      `id,
-       prize_1_title, prize_1_description,
-       prize_2_title, prize_2_description,
-       prize_3_title, prize_3_description,
-       prize_image_url,
+      `id, slot,
        sponsor:sponsors (id, name, logo_url, website, short_description)`,
     )
     .ilike("city", cityName)
     .ilike("state", stateUpper)
     .eq("month_key", monthKey)
     .eq("status", "active")
-    .maybeSingle();
+    .order("slot", { ascending: true });
 
-  const sp = (sponsorship ?? null) as SponsorshipRow | null;
-  const sponsor = sp?.sponsor
-    ? Array.isArray(sp.sponsor)
-      ? sp.sponsor[0]
-      : sp.sponsor
-    : null;
+  const sponsorshipsBySlot = new Map<number, SponsorshipRow>();
+  for (const row of (sponsorshipRows ?? []) as unknown as SponsorshipRow[]) {
+    sponsorshipsBySlot.set(row.slot, row);
+  }
+
+  // Pull prizes for the month (up to 3 places)
+  const { data: prizeRows } = await supabase
+    .from("ladder_prizes")
+    .select("id, place, title, description, image_url")
+    .ilike("city", cityName)
+    .ilike("state", stateUpper)
+    .eq("month_key", monthKey)
+    .order("place", { ascending: true });
+
+  const prizesByPlace = new Map<number, PrizeRow>();
+  for (const row of (prizeRows ?? []) as PrizeRow[]) {
+    prizesByPlace.set(row.place, row);
+  }
 
   return (
     <main className="min-h-screen bg-black px-4 pb-24 pt-6 sm:px-6">
@@ -128,109 +139,57 @@ export default async function CityLadderPage({
         </p>
       </header>
 
-      {/* Sponsor banner */}
+      {/* Sponsors — 3 slots side-by-side */}
       <section className="mx-auto mt-8 max-w-3xl">
-        {sponsor ? (
-          <div className="overflow-hidden rounded-2xl border-2 border-pickle bg-gradient-to-br from-pickle/20 via-black to-electric/20 p-5">
-            <div className="flex items-start gap-4">
-              {sponsor.logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={sponsor.logo_url}
-                  alt={sponsor.name}
-                  className="h-16 w-16 shrink-0 rounded-xl border-2 border-pickle bg-white object-contain p-1"
-                />
-              ) : (
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border-2 border-pickle bg-black">
-                  <span className="font-display text-display-lg font-extrabold text-pickle">
-                    {sponsor.name[0]?.toUpperCase()}
-                  </span>
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="font-display text-[10px] uppercase font-bold tracking-widest text-pickle">
-                  Sponsored by
-                </p>
-                <p className="mt-0.5 font-display text-display-md font-extrabold text-white">
-                  {sponsor.website ? (
-                    <a
-                      href={sponsor.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:text-pickle hover:underline"
-                    >
-                      {sponsor.name}
-                    </a>
-                  ) : (
-                    sponsor.name
-                  )}
-                </p>
-                {sponsor.short_description && (
-                  <p className="mt-1 text-sm text-white/70">
-                    {sponsor.short_description}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {(sp?.prize_1_title || sp?.prize_2_title || sp?.prize_3_title) && (
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <PrizeCard
-                  place="1st"
-                  title={sp?.prize_1_title}
-                  description={sp?.prize_1_description}
-                  accent="text-bright border-bright"
-                />
-                <PrizeCard
-                  place="2nd"
-                  title={sp?.prize_2_title}
-                  description={sp?.prize_2_description}
-                  accent="text-pickle border-pickle"
-                />
-                <PrizeCard
-                  place="3rd"
-                  title={sp?.prize_3_title}
-                  description={sp?.prize_3_description}
-                  accent="text-electric border-electric"
-                />
-              </div>
-            )}
-
-            {sp?.prize_image_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={sp.prize_image_url}
-                alt="Prizes"
-                className="mt-4 w-full rounded-xl border-2 border-pickle/40 object-cover"
-              />
-            )}
-          </div>
-        ) : (
-          <div className="rounded-2xl border-2 border-dashed border-white/20 bg-white/[0.02] p-6 text-center">
-            <p className="font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
-              Open sponsorship
-            </p>
-            <p className="mt-2 text-sm text-white/60">
-              No sponsor for {cityName} this month. Local businesses can sponsor
-              the ladder, set the prizes, and put their logo here all month.
-            </p>
-            <a
-              href={`mailto:hello@pklrally.com?subject=Sponsor%20${encodeURIComponent(cityName)}%20${monthKey}`}
-              className="mt-3 inline-block rounded-md border-2 border-pickle px-4 py-2 font-display text-display-xs uppercase font-bold tracking-wide text-pickle transition hover:bg-pickle hover:text-black"
-            >
-              Become a sponsor
-            </a>
-          </div>
-        )}
+        <p className="mb-3 font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
+          Monthly Sponsors
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[1, 2, 3].map((slot) => (
+            <SponsorSlotCard
+              key={slot}
+              slot={slot}
+              data={sponsorshipsBySlot.get(slot) ?? null}
+              cityName={cityName}
+              monthKey={monthKey}
+            />
+          ))}
+        </div>
       </section>
 
-      {/* How the ranking works — DARK explainer above the LIGHT list */}
-      <section className="mx-auto mt-8 max-w-3xl rounded-2xl border-2 border-white/15 bg-white/[0.03] p-5">
-        <h2 className="font-display text-display-sm font-extrabold uppercase tracking-wide text-pickle">
-          How the ranking works
-        </h2>
+      {/* Prizes — 1st / 2nd / 3rd */}
+      <section className="mx-auto mt-8 max-w-3xl">
+        <p className="mb-3 font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
+          Prizes
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <PrizeSlotCard
+            place={1}
+            label="1st"
+            data={prizesByPlace.get(1) ?? null}
+            accentBorder="border-bright"
+            accentText="text-bright"
+          />
+          <PrizeSlotCard
+            place={2}
+            label="2nd"
+            data={prizesByPlace.get(2) ?? null}
+            accentBorder="border-pickle"
+            accentText="text-pickle"
+          />
+          <PrizeSlotCard
+            place={3}
+            label="3rd"
+            data={prizesByPlace.get(3) ?? null}
+            accentBorder="border-electric"
+            accentText="text-electric"
+          />
+        </div>
+      </section>
 
-        <div className="mt-4 rounded-xl border-2 border-pickle bg-black p-4 text-center">
+      {/* Collapsible "How the ranking works" */}
+      <LadderExplainer>
+        <div className="rounded-xl border-2 border-pickle bg-black p-4 text-center">
           <p className="font-mono text-base text-bright sm:text-lg">
             score = weighted&nbsp;wins × win&nbsp;rate
           </p>
@@ -309,7 +268,7 @@ export default async function CityLadderPage({
           default to 3.5 for these calculations. Ties broken by weighted wins,
           then total wins, then matches played.
         </p>
-      </section>
+      </LadderExplainer>
 
       {/* LIGHT-themed ranking list */}
       <section className="mx-auto mt-8 max-w-3xl">
@@ -358,28 +317,132 @@ export default async function CityLadderPage({
   );
 }
 
-function PrizeCard({
-  place,
-  title,
-  description,
-  accent,
+/**
+ * One sponsor slot in the 3-up grid. Filled = sponsor logo + name +
+ * description. Empty = "Slot N open" CTA that emails an inquiry.
+ */
+function SponsorSlotCard({
+  slot,
+  data,
+  cityName,
+  monthKey,
 }: {
-  place: string;
-  title: string | null | undefined;
-  description: string | null | undefined;
-  accent: string;
+  slot: number;
+  data: SponsorshipRow | null;
+  cityName: string;
+  monthKey: string;
+}) {
+  const sponsor = data?.sponsor
+    ? Array.isArray(data.sponsor)
+      ? data.sponsor[0]
+      : data.sponsor
+    : null;
+
+  if (!sponsor) {
+    const subject = `Sponsor%20${encodeURIComponent(cityName)}%20slot%20${slot}%20${monthKey}`;
+    return (
+      <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-white/[0.02] p-4 text-center min-h-[140px]">
+        <p className="font-display text-[10px] uppercase font-bold tracking-widest text-white/40">
+          Slot {slot} · Open
+        </p>
+        <a
+          href={`mailto:hello@pklrally.com?subject=${subject}`}
+          className="mt-2 rounded-md border-2 border-pickle px-3 py-1.5 font-display text-[10px] uppercase font-bold tracking-wide text-pickle transition hover:bg-pickle hover:text-black"
+        >
+          Become a sponsor
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border-2 border-pickle bg-gradient-to-br from-pickle/10 via-black to-electric/10 p-4">
+      <div className="flex flex-col items-center text-center">
+        {sponsor.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={sponsor.logo_url}
+            alt={sponsor.name}
+            className="h-14 w-14 shrink-0 rounded-xl border-2 border-pickle bg-white object-contain p-1"
+          />
+        ) : (
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border-2 border-pickle bg-black">
+            <span className="font-display text-display-base font-extrabold text-pickle">
+              {sponsor.name[0]?.toUpperCase()}
+            </span>
+          </div>
+        )}
+        <p className="mt-2 font-display text-[10px] uppercase font-bold tracking-widest text-pickle">
+          Slot {slot}
+        </p>
+        <p className="mt-0.5 font-display text-display-sm font-extrabold text-white">
+          {sponsor.website ? (
+            <a
+              href={sponsor.website}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-pickle hover:underline"
+            >
+              {sponsor.name}
+            </a>
+          ) : (
+            sponsor.name
+          )}
+        </p>
+        {sponsor.short_description && (
+          <p className="mt-1 text-xs text-white/70">
+            {sponsor.short_description}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Prize slot for 1st / 2nd / 3rd place. Photo and/or text. Empty slots
+ * still render so the layout stays consistent — just shows "—" placeholder.
+ */
+function PrizeSlotCard({
+  place,
+  label,
+  data,
+  accentBorder,
+  accentText,
+}: {
+  place: number;
+  label: string;
+  data: PrizeRow | null;
+  accentBorder: string;
+  accentText: string;
 }) {
   return (
-    <div className={`rounded-xl border-2 bg-black/50 p-3 ${accent}`}>
-      <p className="font-display text-[10px] uppercase font-extrabold tracking-widest">
-        {place}
-      </p>
-      <p className="mt-1 font-display text-display-xs font-bold text-white">
-        {title || "—"}
-      </p>
-      {description && (
-        <p className="mt-1 text-xs text-white/60">{description}</p>
+    <div
+      className={`flex flex-col overflow-hidden rounded-2xl border-2 bg-black/40 ${accentBorder}`}
+    >
+      {data?.image_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={data.image_url}
+          alt={data.title ?? `${label} prize`}
+          className="aspect-video w-full object-cover"
+        />
       )}
+      <div className="flex flex-1 flex-col p-3">
+        <p
+          className={`font-display text-[10px] uppercase font-extrabold tracking-widest ${accentText}`}
+        >
+          {label} place
+        </p>
+        <p className="mt-1 font-display text-display-sm font-bold text-white">
+          {data?.title || (
+            <span className="text-white/30">No prize set</span>
+          )}
+        </p>
+        {data?.description && (
+          <p className="mt-1 text-xs text-white/70">{data.description}</p>
+        )}
+      </div>
     </div>
   );
 }

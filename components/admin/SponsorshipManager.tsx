@@ -22,14 +22,23 @@ interface SponsorshipRow {
   state: string;
   month_key: string;
   status: string;
-  prize_1_title: string | null;
-  prize_2_title: string | null;
-  prize_3_title: string | null;
-  prize_image_url: string | null;
+  slot: number;
   amount_paid_cents: number | null;
   created_at: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sponsor: any;
+}
+
+interface PrizeRow {
+  id: string;
+  city: string;
+  state: string;
+  month_key: string;
+  place: number;
+  title: string | null;
+  description: string | null;
+  image_url: string | null;
+  created_at: string;
 }
 
 interface CityOption {
@@ -40,6 +49,7 @@ interface CityOption {
 interface Props {
   sponsors: Sponsor[];
   sponsorships: SponsorshipRow[];
+  prizes: PrizeRow[];
   cityOptions: CityOption[];
 }
 
@@ -54,6 +64,7 @@ interface Props {
 export default function SponsorshipManager({
   sponsors,
   sponsorships,
+  prizes,
   cityOptions,
 }: Props) {
   return (
@@ -64,6 +75,7 @@ export default function SponsorshipManager({
         sponsorships={sponsorships}
         cityOptions={cityOptions}
       />
+      <PrizesPanel prizes={prizes} cityOptions={cityOptions} />
     </div>
   );
 }
@@ -306,35 +318,15 @@ function SponsorshipPanel({
   cityOptions: CityOption[];
 }) {
   const router = useRouter();
-  const prizeImageRef = useRef<HTMLInputElement | null>(null);
-
   const monthOptions = useMemo(() => buildMonthOptions(), []);
 
   const [sponsorId, setSponsorId] = useState("");
   const [cityKey, setCityKey] = useState(""); // "STATE::city"
   const [monthKey, setMonthKey] = useState(currentMonthKey());
-  const [p1t, setP1t] = useState("");
-  const [p1d, setP1d] = useState("");
-  const [p2t, setP2t] = useState("");
-  const [p2d, setP2d] = useState("");
-  const [p3t, setP3t] = useState("");
-  const [p3d, setP3d] = useState("");
-  const [prizeImageFile, setPrizeImageFile] = useState<File | null>(null);
+  const [slot, setSlot] = useState<number>(1);
   const [amountDollars, setAmountDollars] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  async function uploadPrizeImage(file: File): Promise<string> {
-    const supabase = createClient();
-    const ext = file.name.split(".").pop() ?? "jpg";
-    const path = `prizes/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await supabase.storage
-      .from("sponsor-assets")
-      .upload(path, file, { upsert: false, contentType: file.type });
-    if (error) throw new Error(error.message);
-    const { data } = supabase.storage.from("sponsor-assets").getPublicUrl(path);
-    return data.publicUrl;
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -351,11 +343,6 @@ function SponsorshipPanel({
             c.city.toLowerCase() === cityLower,
         )?.city ?? cityLower;
 
-      let prizeImageUrl: string | null = null;
-      if (prizeImageFile) {
-        prizeImageUrl = await uploadPrizeImage(prizeImageFile);
-      }
-
       const amountCents = amountDollars
         ? Math.round(Number(amountDollars) * 100)
         : null;
@@ -366,25 +353,13 @@ function SponsorshipPanel({
         city: cityFull,
         state: stateUp,
         month_key: monthKey,
-        prize_1_title: p1t.trim() || null,
-        prize_1_description: p1d.trim() || null,
-        prize_2_title: p2t.trim() || null,
-        prize_2_description: p2d.trim() || null,
-        prize_3_title: p3t.trim() || null,
-        prize_3_description: p3d.trim() || null,
-        prize_image_url: prizeImageUrl,
+        slot,
         amount_paid_cents: amountCents,
         status: "active",
       });
       if (error) throw new Error(error.message);
 
-      // reset form
-      setP1t(""); setP1d("");
-      setP2t(""); setP2d("");
-      setP3t(""); setP3d("");
-      setPrizeImageFile(null);
       setAmountDollars("");
-      if (prizeImageRef.current) prizeImageRef.current.value = "";
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to save sponsorship");
@@ -412,14 +387,14 @@ function SponsorshipPanel({
         Sponsorships
       </h2>
       <p className="mt-1 text-sm text-white/60">
-        Bind a sponsor to a city for a specific month. Only one{" "}
-        <span className="text-pickle">active</span> sponsorship per city +
-        month.
+        Bind a sponsor to one of three slots in a city for a specific month.
+        Each city + month + slot can hold one active sponsor. Prizes are
+        managed in the panel below.
       </p>
 
       <form
         onSubmit={handleSubmit}
-        className="mt-4 grid gap-3 rounded-2xl border-2 border-pickle/40 bg-white/[0.02] p-4 sm:grid-cols-3"
+        className="mt-4 grid gap-3 rounded-2xl border-2 border-pickle/40 bg-white/[0.02] p-4 sm:grid-cols-4"
       >
         <Field label="Sponsor *">
           <select
@@ -467,66 +442,19 @@ function SponsorshipPanel({
             ))}
           </select>
         </Field>
-
-        <Field label="1st prize title">
-          <input
-            value={p1t}
-            onChange={(e) => setP1t(e.target.value)}
+        <Field label="Slot *">
+          <select
+            value={slot}
+            onChange={(e) => setSlot(Number(e.target.value))}
             className="input"
-            placeholder="e.g. Selkirk Vanguard Paddle"
-          />
-        </Field>
-        <Field label="1st prize details" full>
-          <input
-            value={p1d}
-            onChange={(e) => setP1d(e.target.value)}
-            className="input"
-            placeholder="$200 retail · pick up at the shop"
-          />
+          >
+            <option value={1}>Slot 1</option>
+            <option value={2}>Slot 2</option>
+            <option value={3}>Slot 3</option>
+          </select>
         </Field>
 
-        <Field label="2nd prize title">
-          <input
-            value={p2t}
-            onChange={(e) => setP2t(e.target.value)}
-            className="input"
-            placeholder="$50 gift card"
-          />
-        </Field>
-        <Field label="2nd prize details" full>
-          <input
-            value={p2d}
-            onChange={(e) => setP2d(e.target.value)}
-            className="input"
-          />
-        </Field>
-
-        <Field label="3rd prize title">
-          <input
-            value={p3t}
-            onChange={(e) => setP3t(e.target.value)}
-            className="input"
-            placeholder="Free can of balls"
-          />
-        </Field>
-        <Field label="3rd prize details" full>
-          <input
-            value={p3d}
-            onChange={(e) => setP3d(e.target.value)}
-            className="input"
-          />
-        </Field>
-
-        <Field label="Prize photo (optional)">
-          <input
-            ref={prizeImageRef}
-            type="file"
-            accept="image/*"
-            onChange={(e) => setPrizeImageFile(e.target.files?.[0] ?? null)}
-            className="input"
-          />
-        </Field>
-        <Field label="Amount paid (USD)">
+        <Field label="Amount paid (USD)" full>
           <input
             type="number"
             min="0"
@@ -538,7 +466,7 @@ function SponsorshipPanel({
           />
         </Field>
 
-        <div className="sm:col-span-3">
+        <div className="sm:col-span-4">
           <button
             type="submit"
             disabled={busy || !sponsorId || !cityKey}
@@ -556,8 +484,8 @@ function SponsorshipPanel({
             <tr>
               <Th>Month</Th>
               <Th>City</Th>
+              <Th>Slot</Th>
               <Th>Sponsor</Th>
-              <Th>Prizes</Th>
               <Th>Paid</Th>
               <Th>Status</Th>
               <Th>Actions</Th>
@@ -571,7 +499,7 @@ function SponsorshipPanel({
                   className="px-4 py-8 text-center text-white/50"
                 >
                   No sponsorships yet. Add a sponsor above, then bind them to
-                  a city + month.
+                  a city + month + slot.
                 </td>
               </tr>
             )}
@@ -579,9 +507,6 @@ function SponsorshipPanel({
               const sponsor = Array.isArray(sp.sponsor)
                 ? sp.sponsor[0]
                 : sp.sponsor;
-              const prizes = [sp.prize_1_title, sp.prize_2_title, sp.prize_3_title]
-                .filter(Boolean)
-                .join(", ");
               return (
                 <tr key={sp.id} className="border-t-2 border-pickle/30">
                   <Td>
@@ -595,10 +520,12 @@ function SponsorshipPanel({
                     </span>
                   </Td>
                   <Td>
-                    <span className="text-white">{sponsor?.name ?? "—"}</span>
+                    <span className="font-mono text-xs text-pickle">
+                      {sp.slot}
+                    </span>
                   </Td>
                   <Td>
-                    <span className="text-xs text-white/70">{prizes || "—"}</span>
+                    <span className="text-white">{sponsor?.name ?? "—"}</span>
                   </Td>
                   <Td>
                     <span className="font-mono text-xs text-white/60">
@@ -645,6 +572,299 @@ function SponsorshipPanel({
                 </tr>
               );
             })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
+// Panel 3: Prizes (1st / 2nd / 3rd per city + month)
+// ============================================================
+
+function PrizesPanel({
+  prizes,
+  cityOptions,
+}: {
+  prizes: PrizeRow[];
+  cityOptions: CityOption[];
+}) {
+  const router = useRouter();
+  const imageRef = useRef<HTMLInputElement | null>(null);
+  const monthOptions = useMemo(() => buildMonthOptions(), []);
+
+  const [cityKey, setCityKey] = useState("");
+  const [monthKey, setMonthKey] = useState(currentMonthKey());
+  const [place, setPlace] = useState<number>(1);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function uploadImage(file: File): Promise<string> {
+    const supabase = createClient();
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const path = `prizes/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error } = await supabase.storage
+      .from("sponsor-assets")
+      .upload(path, file, { upsert: false, contentType: file.type });
+    if (error) throw new Error(error.message);
+    const { data } = supabase.storage.from("sponsor-assets").getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      if (!cityKey) throw new Error("Choose a city");
+      const [stateUp, cityLower] = cityKey.split("::");
+      const cityFull =
+        cityOptions.find(
+          (c) =>
+            c.state.toUpperCase() === stateUp &&
+            c.city.toLowerCase() === cityLower,
+        )?.city ?? cityLower;
+
+      let imageUrl: string | null = null;
+      if (imageFile) {
+        imageUrl = await uploadImage(imageFile);
+      }
+
+      const supabase = createClient();
+      // Upsert: if a prize exists for this city/month/place, replace it.
+      // Otherwise insert new.
+      const { data: existing } = await supabase
+        .from("ladder_prizes")
+        .select("id")
+        .ilike("city", cityFull)
+        .ilike("state", stateUp)
+        .eq("month_key", monthKey)
+        .eq("place", place)
+        .maybeSingle();
+
+      const payload = {
+        city: cityFull,
+        state: stateUp,
+        month_key: monthKey,
+        place,
+        title: title.trim() || null,
+        description: description.trim() || null,
+        ...(imageUrl ? { image_url: imageUrl } : {}),
+        updated_at: new Date().toISOString(),
+      };
+
+      if (existing) {
+        const { error } = await supabase
+          .from("ladder_prizes")
+          .update(payload)
+          .eq("id", existing.id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await supabase
+          .from("ladder_prizes")
+          .insert(payload);
+        if (error) throw new Error(error.message);
+      }
+
+      setTitle("");
+      setDescription("");
+      setImageFile(null);
+      if (imageRef.current) imageRef.current.value = "";
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to save prize");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this prize?")) return;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("ladder_prizes")
+      .delete()
+      .eq("id", id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <section>
+      <h2 className="font-display text-display-md font-extrabold text-pickle">
+        Prizes
+      </h2>
+      <p className="mt-1 text-sm text-white/60">
+        Set 1st, 2nd, and 3rd place prizes per city + month. Each prize can
+        have a title, description, and image (any combination). Submitting
+        again for the same place updates the existing prize.
+      </p>
+
+      <form
+        onSubmit={handleSubmit}
+        className="mt-4 grid gap-3 rounded-2xl border-2 border-pickle/40 bg-white/[0.02] p-4 sm:grid-cols-3"
+      >
+        <Field label="City *">
+          <select
+            value={cityKey}
+            onChange={(e) => setCityKey(e.target.value)}
+            required
+            className="input"
+          >
+            <option value="">— pick city —</option>
+            {cityOptions.map((c) => (
+              <option
+                key={`${c.state}-${c.city}`}
+                value={`${c.state.toUpperCase()}::${c.city.toLowerCase()}`}
+              >
+                {c.city}, {c.state}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Month *">
+          <select
+            value={monthKey}
+            onChange={(e) => setMonthKey(e.target.value)}
+            className="input"
+          >
+            {monthOptions.map((m) => (
+              <option key={m} value={m}>
+                {monthLabel(m)}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Place *">
+          <select
+            value={place}
+            onChange={(e) => setPlace(Number(e.target.value))}
+            className="input"
+          >
+            <option value={1}>1st</option>
+            <option value={2}>2nd</option>
+            <option value={3}>3rd</option>
+          </select>
+        </Field>
+
+        <Field label="Title" full>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="input"
+            placeholder="e.g. Selkirk Vanguard Paddle"
+          />
+        </Field>
+        <Field label="Image (optional)">
+          <input
+            ref={imageRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+            className="input"
+          />
+        </Field>
+
+        <Field label="Description" full>
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="input"
+            placeholder="$200 retail · pick up at the shop"
+          />
+        </Field>
+
+        <div className="sm:col-span-3">
+          <button
+            type="submit"
+            disabled={busy || !cityKey}
+            className="rounded-lg bg-pickle px-4 py-2 font-display text-display-xs font-bold uppercase tracking-wide text-black disabled:opacity-50"
+          >
+            {busy ? "Saving…" : "Save prize"}
+          </button>
+          {err && <span className="ml-3 text-sm text-bright">⚠ {err}</span>}
+        </div>
+      </form>
+
+      <div className="mt-6 overflow-hidden rounded-2xl border-2 border-pickle">
+        <table className="w-full border-collapse text-sm">
+          <thead className="bg-pickle text-black">
+            <tr>
+              <Th>Month</Th>
+              <Th>City</Th>
+              <Th>Place</Th>
+              <Th>Image</Th>
+              <Th>Title</Th>
+              <Th>Description</Th>
+              <Th>Actions</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {prizes.length === 0 && (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="px-4 py-8 text-center text-white/50"
+                >
+                  No prizes yet.
+                </td>
+              </tr>
+            )}
+            {prizes.map((p) => (
+              <tr key={p.id} className="border-t-2 border-pickle/30">
+                <Td>
+                  <span className="font-mono text-xs text-white/80">
+                    {monthLabel(p.month_key)}
+                  </span>
+                </Td>
+                <Td>
+                  <span className="text-white">
+                    {p.city}, {p.state}
+                  </span>
+                </Td>
+                <Td>
+                  <span className="font-mono text-xs text-pickle">
+                    {p.place === 1 ? "1st" : p.place === 2 ? "2nd" : "3rd"}
+                  </span>
+                </Td>
+                <Td>
+                  {p.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.image_url}
+                      alt={p.title ?? ""}
+                      className="h-10 w-16 rounded border-2 border-pickle/40 object-cover"
+                    />
+                  ) : (
+                    <span className="text-white/30">—</span>
+                  )}
+                </Td>
+                <Td>
+                  <span className="text-white">{p.title ?? "—"}</span>
+                </Td>
+                <Td>
+                  <span className="text-xs text-white/70">
+                    {p.description ?? "—"}
+                  </span>
+                </Td>
+                <Td>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(p.id)}
+                    className="rounded-md border border-bright px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-bright hover:bg-bright hover:text-black"
+                  >
+                    Delete
+                  </button>
+                </Td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
