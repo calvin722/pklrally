@@ -8,9 +8,11 @@ import {
   Marker,
   ZoomableGroup,
 } from "react-simple-maps";
+import { useRouter } from "next/navigation";
 import { fetchCityNodes, isCityBuzzing } from "@/lib/courts";
 import type { CityNode } from "@/lib/types";
 import { useTheme } from "@/components/ThemeProvider";
+import { stateCode } from "@/lib/states";
 
 const US_TOPO_URL =
   "https://cdn.jsdelivr.net/npm/us-atlas@3.0.1/states-10m.json";
@@ -20,6 +22,7 @@ interface USMapProps {
 }
 
 export default function USMap({ onCitySelect }: USMapProps) {
+  const router = useRouter();
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
   const [rawCities, setRawCities] = useState<CityNode[]>([]);
   const [legendExpanded, setLegendExpanded] = useState(true);
@@ -106,10 +109,16 @@ export default function USMap({ onCitySelect }: USMapProps) {
                   fill={mapColors.stateFill}
                   stroke={mapColors.stateStroke}
                   strokeWidth={0.6}
+                  onClick={() => {
+                    const code = stateCode(geo.properties.name ?? "");
+                    if (code) {
+                      router.push(`/map/${code.toLowerCase()}`);
+                    }
+                  }}
                   style={{
-                    default: { outline: "none" },
-                    hover: { outline: "none", fill: mapColors.stateHover },
-                    pressed: { outline: "none", fill: mapColors.stateHover },
+                    default: { outline: "none", cursor: "pointer" },
+                    hover: { outline: "none", fill: mapColors.stateHover, cursor: "pointer" },
+                    pressed: { outline: "none", fill: mapColors.stateHover, cursor: "pointer" },
                   }}
                 />
               ))
