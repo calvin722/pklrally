@@ -16,8 +16,8 @@ interface WordmarkProps {
  * based on the active theme.
  *
  * Files (drop into /public):
- *   /wordmark-dark.png   — used when [data-theme="dark"] is active
- *   /wordmark-light.png  — used when [data-theme="light"] is active
+ *   /wordmark-dark.svg   — used when [data-theme="dark"] is active
+ *   /wordmark-light.svg  — used when [data-theme="light"] is active
  *
  * The aspect ratio is set to ~5.4:1 to match the supplied artwork. If
  * the source images have a different ratio, just adjust SIZE_MAP below
@@ -37,7 +37,7 @@ export default function Wordmark({
   priority = false,
 }: WordmarkProps) {
   const theme = useTheme();
-  const src = theme === "light" ? "/wordmark-light.png" : "/wordmark-dark.png";
+  const src = theme === "light" ? "/wordmark-light.svg" : "/wordmark-dark.svg";
   const { h, w } = SIZE_MAP[size];
 
   return (
