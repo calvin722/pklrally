@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Manrope, JetBrains_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import { getCurrentPlayer } from "@/lib/supabase/getCurrentPlayer";
@@ -88,6 +89,12 @@ export default async function RootLayout({
       className={`${inter.variable} ${manrope.variable} ${jetbrains.variable}`}
     >
       <body className="min-h-screen bg-black font-sans text-white antialiased">
+        {/* Umami analytics — privacy-friendly pageview + UTM tracking */}
+        <Script
+          src="https://cloud.umami.is/script.js"
+          data-website-id="5d74cd25-942b-45c4-9eff-742d8a7efa33"
+          strategy="afterInteractive"
+        />
         <ThemeProvider initialTheme={initialTheme} playerId={player?.id ?? null}>
           {children}
         </ThemeProvider>
