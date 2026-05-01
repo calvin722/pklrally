@@ -84,86 +84,112 @@ export default function PlayerSlot({
   const accentDimBorder =
     accent === "pickle" ? "border-pickle/40" : "border-electric/40";
 
-  // FILLED state
-  if (value && !isActive) {
-    return (
-      <button
-        type="button"
-        onClick={onActivate}
-        className={`relative w-full rounded-xl border-2 ${accentBorder} ${
-          isServer ? "neon-pickle" : ""
-        } bg-black p-3 text-left transition hover:border-white`}
-      >
-        {isServer && (
-          <span className="absolute -top-2 left-3 rounded-full bg-pickle px-2 py-0.5 font-display text-[10px] font-extrabold uppercase tracking-wider text-black">
-            ★ Server
-          </span>
-        )}
-        <div
-          className={`font-display text-display-base font-bold ${
-            value.kind === "me" ? "text-pickle" : "text-white"
-          } truncate`}
-        >
-          {value.displayName}
-        </div>
-        <div className={`mt-1 text-xs ${accentText} font-semibold uppercase tracking-wide`}>
-          {value.kind === "me" ? "You" : value.kind === "guest" ? "Guest" : "Member"}
-        </div>
-        <span
-          className="absolute right-2 top-2 rounded-md border border-white/30 px-1.5 py-0.5 text-[10px] text-white/50 hover:border-white hover:text-white"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClear();
-          }}
-        >
-          ✕
-        </span>
-      </button>
-    );
-  }
-
-  // EMPTY collapsed
-  if (!isActive) {
-    return (
-      <button
-        type="button"
-        onClick={onActivate}
-        className={`relative w-full rounded-xl border-2 border-dashed ${accentDimBorder} bg-black p-3 text-left transition hover:border-solid hover:${accentBorder}`}
-      >
-        {isServer && (
-          <span className="absolute -top-2 left-3 rounded-full bg-pickle px-2 py-0.5 font-display text-[10px] font-extrabold uppercase tracking-wider text-black">
-            ★ Server
-          </span>
-        )}
-        <div className={`font-display text-display-sm font-bold ${accentText} uppercase tracking-wide`}>
-          + Tap to add
-        </div>
-        <div className="mt-1 text-xs text-white/40">Search or invite a guest</div>
-      </button>
-    );
-  }
-
-  // ACTIVE — search expanded
-  return (
-    <div
-      className={`relative rounded-xl border-2 ${accentBorder} bg-black p-3 ${
-        isServer ? "neon-pickle" : ""
-      }`}
+  // The court-cell button — always rendered. Reflects the slot's state
+  // (filled or empty). When tapped, opens the search/invite editor as a
+  // bottom-sheet overlay (rendered separately at the end of this fn).
+  const slotButton = value ? (
+    <button
+      type="button"
+      onClick={onActivate}
+      className={`relative w-full rounded-xl border-2 ${
+        isActive ? "border-bright" : accentBorder
+      } ${isServer ? "neon-pickle" : ""} bg-black p-3 text-left transition hover:border-white`}
     >
       {isServer && (
         <span className="absolute -top-2 left-3 rounded-full bg-pickle px-2 py-0.5 font-display text-[10px] font-extrabold uppercase tracking-wider text-black">
           ★ Server
         </span>
       )}
+      <div
+        className={`font-display text-display-base font-bold ${
+          value.kind === "me" ? "text-pickle" : "text-white"
+        } truncate`}
+      >
+        {value.displayName}
+      </div>
+      <div className={`mt-1 text-xs ${accentText} font-semibold uppercase tracking-wide`}>
+        {value.kind === "me" ? "You" : value.kind === "guest" ? "Guest" : "Member"}
+      </div>
+      <span
+        className="absolute right-2 top-2 rounded-md border border-white/30 px-1.5 py-0.5 text-[10px] text-white/50 hover:border-white hover:text-white"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClear();
+        }}
+      >
+        ✕
+      </span>
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={onActivate}
+      className={`relative w-full rounded-xl border-2 border-dashed ${
+        isActive ? "border-bright" : accentDimBorder
+      } bg-black p-3 text-left transition hover:border-solid hover:${accentBorder}`}
+    >
+      {isServer && (
+        <span className="absolute -top-2 left-3 rounded-full bg-pickle px-2 py-0.5 font-display text-[10px] font-extrabold uppercase tracking-wider text-black">
+          ★ Server
+        </span>
+      )}
+      <div className={`font-display text-display-sm font-bold ${
+        isActive ? "text-bright" : accentText
+      } uppercase tracking-wide`}>
+        {isActive ? "Editing…" : "+ Tap to add"}
+      </div>
+      <div className="mt-1 text-xs text-white/40">
+        {isActive ? "See sheet below" : "Search or invite a guest"}
+      </div>
+    </button>
+  );
 
-      <input
-        ref={inputRef}
-        type="text"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search name..."
-        className="w-full rounded-lg border-2 border-white/30 bg-black px-3 py-2 text-base text-white placeholder:text-white/40 focus:border-pickle focus:outline-none"
+  // If not active, just the button.
+  if (!isActive) return slotButton;
+
+  // Active — render the court-cell button AND a fixed bottom-sheet
+  // overlay containing the search/invite editor. The overlay escapes
+  // the court canvas's grid cells so the email/phone input has full
+  // viewport width on mobile.
+  return (
+    <>
+      {slotButton}
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
+        onClick={onActivate}
+        aria-hidden
       />
+      {/* Bottom sheet on mobile, centered modal on desktop */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        className={`fixed inset-x-0 bottom-0 z-50 max-h-[80vh] overflow-y-auto rounded-t-2xl border-t-2 border-x-2 ${accentBorder} bg-black p-5 shadow-2xl
+          sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border-2`}
+      >
+        {/* Header with close */}
+        <div className="mb-3 flex items-center justify-between">
+          <p className="font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
+            {value ? "Replace player" : "Add player"}
+          </p>
+          <button
+            type="button"
+            onClick={onActivate}
+            aria-label="Close"
+            className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white/30 font-mono text-base text-white/60 hover:border-pickle hover:text-pickle"
+          >
+            ×
+          </button>
+        </div>
+
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name..."
+          className="w-full rounded-lg border-2 border-white/30 bg-black px-3 py-3 text-base text-white placeholder:text-white/40 focus:border-pickle focus:outline-none"
+        />
 
       {searching && <p className="mt-2 text-xs text-white/40">Searching...</p>}
 
@@ -290,6 +316,7 @@ export default function PlayerSlot({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
