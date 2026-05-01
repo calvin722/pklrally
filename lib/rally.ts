@@ -13,15 +13,30 @@ export interface PlayerSlot {
   displayName: string;
   /** Email captured for guest invite */
   email?: string;
-  /** If true, send an email invite to this guest after match save */
+  /** Phone (E.164 or local) for click-to-text guest invite */
+  phone?: string;
+  /** If true, send an email invite (or surface SMS link) after match save */
   sendInvite?: boolean;
 }
 
-/** Returned by saveMatch when there are guests flagged for invite. */
+/** Returned by saveMatch — guests flagged for an email invite. */
 export interface PendingInvite {
   playerId: string;
   email: string;
   displayName: string;
+}
+
+/**
+ * Returned by saveMatch — guests flagged for a click-to-text invite. The
+ * UI builds an `sms:` URL from these and shows a "Text X her invite"
+ * button that opens the logger's native SMS app with the body pre-filled.
+ */
+export interface PendingSmsInvite {
+  playerId: string;
+  phone: string;
+  displayName: string;
+  /** Full claim URL: https://pklrally.com/c/<token> */
+  claimUrl: string;
 }
 
 /**
@@ -68,15 +83,30 @@ const GENERIC_GUEST_NAMES = new Set([
  * Insert a new guest player row. Used when the user types a name that doesn't
  * match an existing player and clicks "Add as guest".
  *
- * Generic placeholder names ("guest", "anon", etc.) without email reuse a
- * single shared "Guest" row (seeded by migration 0014) so we don't create
- * dozens of useless duplicate guests.
+ * Generic placeholder names ("guest", "anon", etc.) with no contact info
+ * reuse a single shared "Guest" row (seeded by migration 0014) so we don't
+ * create dozens of useless duplicate guests.
+ *
+ * If a phone is provided, we mint an `invite_token` so the logger can
+ * send a click-to-text claim link. The token expires in 90 days.
  */
-export async function createGuest(displayName: string, email?: string) {
+export async function createGuest(
+  displayName: string,
+  email?: string,
+  phone?: string,
+): Promise<{
+  id: string;
+  display_name: string;
+  is_guest: boolean;
+  email: string | null;
+  phone?: string | null;
+  invite_token?: string | null;
+}> {
   const supabase = createClient();
   const trimmedName = displayName.trim();
   const normalized = trimmedName.toLowerCase();
-  const isPlaceholder = !email && GENERIC_GUEST_NAMES.has(normalized);
+  const isPlaceholder =
+    !email && !phone && GENERIC_GUEST_NAMES.has(normalized);
 
   if (isPlaceholder) {
     // Reuse the shared "Guest" player from migration 0014
@@ -93,14 +123,24 @@ export async function createGuest(displayName: string, email?: string) {
     // If migration hasn't run yet, fall through to creating a normal guest
   }
 
+  // Generate a one-time claim token if we have a phone (so the logger
+  // can text a /c/<token> link). Tokens expire in 90 days.
+  const inviteToken = phone ? crypto.randomUUID() : null;
+  const expiresAt = phone
+    ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+
   const { data, error } = await supabase
     .from("players")
     .insert({
       display_name: trimmedName,
       email: email?.trim() || null,
+      phone: phone?.trim() || null,
       is_guest: true,
+      invite_token: inviteToken,
+      invite_token_expires_at: expiresAt,
     })
-    .select("id, display_name, is_guest, email")
+    .select("id, display_name, is_guest, email, phone, invite_token")
     .single();
 
   if (error) throw new Error(error.message);
@@ -151,6 +191,7 @@ export async function saveMatch(input: {
   matchId: string;
   status: string;
   pendingInvites: PendingInvite[];
+  pendingSmsInvites: PendingSmsInvite[];
 }> {
   const supabase = createClient();
 
@@ -164,17 +205,31 @@ export async function saveMatch(input: {
     input.receiverP2,
   ];
 
-  async function ensurePlayerId(slot: PlayerSlot): Promise<string> {
+  // Capture invite_token per slot for click-to-text invites (set when a
+  // guest is created with a phone number).
+  const inviteTokensBySlot: (string | null)[] = [null, null, null, null];
+
+  async function ensurePlayerId(
+    slot: PlayerSlot,
+    slotIndex: number,
+  ): Promise<string> {
     if (slot.playerId) return slot.playerId;
-    const created = await createGuest(slot.displayName, slot.email);
+    const created = await createGuest(
+      slot.displayName,
+      slot.email,
+      slot.phone,
+    );
+    if (created.invite_token) {
+      inviteTokensBySlot[slotIndex] = created.invite_token;
+    }
     return created.id;
   }
 
   const [p1, p2, p3, p4] = await Promise.all([
-    ensurePlayerId(input.serverP1),
-    ensurePlayerId(input.serverP2),
-    ensurePlayerId(input.receiverP1),
-    ensurePlayerId(input.receiverP2),
+    ensurePlayerId(input.serverP1, 0),
+    ensurePlayerId(input.serverP2, 1),
+    ensurePlayerId(input.receiverP1, 2),
+    ensurePlayerId(input.receiverP2, 3),
   ]);
   const playerIds = [p1, p2, p3, p4];
 
@@ -233,5 +288,31 @@ export async function saveMatch(input: {
     })
     .filter((x): x is PendingInvite => x !== null);
 
-  return { matchId: data.id, status, pendingInvites };
+  // Build the list of click-to-text invites (guest + phone + token)
+  const siteUrl =
+    typeof window !== "undefined" && window.location.origin
+      ? window.location.origin
+      : "https://pklrally.com";
+
+  const pendingSmsInvites: PendingSmsInvite[] = slots
+    .map((slot, i) => {
+      const token = inviteTokensBySlot[i];
+      if (
+        slot.kind === "guest" &&
+        slot.phone &&
+        slot.phone.trim().length >= 10 &&
+        token
+      ) {
+        return {
+          playerId: playerIds[i],
+          phone: slot.phone.trim(),
+          displayName: slot.displayName,
+          claimUrl: `${siteUrl}/c/${token}`,
+        };
+      }
+      return null;
+    })
+    .filter((x): x is PendingSmsInvite => x !== null);
+
+  return { matchId: data.id, status, pendingInvites, pendingSmsInvites };
 }

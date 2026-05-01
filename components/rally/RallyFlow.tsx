@@ -4,7 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import CourtPicker from "./CourtPicker";
 import CourtCanvas, { type SlotId } from "./CourtCanvas";
-import { saveMatch, type PlayerSlot } from "@/lib/rally";
+import {
+  saveMatch,
+  type PlayerSlot,
+  type PendingSmsInvite,
+} from "@/lib/rally";
 
 interface Court {
   id: string;
@@ -45,6 +49,10 @@ export default function RallyFlow({ me, defaultCourt }: RallyFlowProps) {
   const [activeSlot, setActiveSlot] = useState<SlotId | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedMatchId, setSavedMatchId] = useState<string | null>(null);
+  const [pendingSmsInvites, setPendingSmsInvites] = useState<PendingSmsInvite[]>(
+    [],
+  );
 
   const allSet = !!serverP1 && !!serverP2 && !!receiverP1 && !!receiverP2;
   // Need at least one team scored AND scores aren't equal (no ties in pickleball)
@@ -101,12 +109,39 @@ export default function RallyFlow({ me, defaultCourt }: RallyFlowProps) {
         });
       }
 
+      // If there are click-to-text SMS invites, hold the user on a
+      // confirmation screen with "Text X her invite" buttons. Otherwise
+      // redirect home immediately.
+      if (result.pendingSmsInvites.length > 0) {
+        setSavedMatchId(result.matchId);
+        setPendingSmsInvites(result.pendingSmsInvites);
+        setSaving(false);
+        return;
+      }
+
       router.push(`/?rally_saved=${result.matchId}&status=${result.status}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save match.");
       setSaving(false);
     }
+  }
+
+  // Post-save SMS invite screen — replaces the form once saved if there
+  // are click-to-text invites to send.
+  if (savedMatchId && pendingSmsInvites.length > 0) {
+    return (
+      <SmsInviteSuccess
+        invites={pendingSmsInvites}
+        loggerName={me.displayName}
+        onDone={() => {
+          router.push(
+            `/?rally_saved=${savedMatchId}&status=saved`,
+          );
+          router.refresh();
+        }}
+      />
+    );
   }
 
   return (
@@ -189,6 +224,103 @@ export default function RallyFlow({ me, defaultCourt }: RallyFlowProps) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ============================================================
+// Click-to-text invite success panel
+// ============================================================
+
+function SmsInviteSuccess({
+  invites,
+  loggerName,
+  onDone,
+}: {
+  invites: PendingSmsInvite[];
+  loggerName: string;
+  onDone: () => void;
+}) {
+  const [textedIds, setTextedIds] = useState<Set<string>>(new Set());
+
+  function buildSmsHref(invite: PendingSmsInvite): string {
+    const body = `Hey ${invite.displayName}, ${loggerName} just logged a pickleball match with you on PKLRALLY. Tap to claim your stats: ${invite.claimUrl}`;
+    // sms: URI — recipient as the phone, body in &body=
+    return `sms:${invite.phone}?&body=${encodeURIComponent(body)}`;
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border-2 border-pickle bg-black p-5 neon-pickle">
+        <p className="font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
+          ✓ Rally saved
+        </p>
+        <h2 className="mt-1 font-display text-display-lg font-extrabold uppercase tracking-tight text-bright">
+          Send your invites
+        </h2>
+        <p className="mt-2 text-sm text-white/70 leading-relaxed">
+          Tap each button below — your phone will open Messages with the
+          invite already typed. Just hit send. The text comes from{" "}
+          <span className="text-pickle">your number</span>, so your friend
+          knows it's really you.
+        </p>
+      </div>
+
+      <ul className="space-y-3">
+        {invites.map((inv) => {
+          const texted = textedIds.has(inv.playerId);
+          return (
+            <li
+              key={inv.playerId}
+              className={`rounded-xl border-2 ${
+                texted ? "border-white/20 bg-white/[0.02]" : "border-pickle bg-black"
+              } p-4`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-display text-display-base font-bold text-white truncate">
+                    {inv.displayName}
+                  </p>
+                  <p className="font-mono text-xs text-white/60">{inv.phone}</p>
+                </div>
+                <a
+                  href={buildSmsHref(inv)}
+                  onClick={() => {
+                    setTextedIds((prev) => {
+                      const next = new Set(prev);
+                      next.add(inv.playerId);
+                      return next;
+                    });
+                  }}
+                  className={`shrink-0 rounded-lg px-4 py-2 font-display text-display-xs font-bold uppercase tracking-wide ${
+                    texted
+                      ? "border-2 border-pickle text-pickle"
+                      : "bg-pickle text-black hover:opacity-90"
+                  }`}
+                >
+                  {texted ? "✓ Sent — text again" : `Text ${inv.displayName.split(" ")[0]}`}
+                </a>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <button
+        type="button"
+        onClick={onDone}
+        className="soft-stamp w-full rounded-xl bg-pickle px-6 py-4 font-display text-display-base font-extrabold uppercase tracking-wide text-black"
+      >
+        Done
+      </button>
+
+      <p className="text-center text-xs text-white/40">
+        Texting from a desktop? Long-press the button to copy the link, or
+        just paste{" "}
+        <span className="font-mono text-white/60">{invites[0]?.claimUrl}</span>{" "}
+        into any chat.
+      </p>
     </div>
   );
 }

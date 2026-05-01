@@ -33,18 +33,30 @@ function LoginForm() {
     // callback can route the user appropriately after sign-in.
     const next = searchParams.get("next");
     const claim = searchParams.get("claim");
+    const claimToken = searchParams.get("claim_token");
     const redirectParams = new URLSearchParams();
     if (next) redirectParams.set("next", next);
     if (claim) redirectParams.set("claim", claim);
+    if (claimToken) redirectParams.set("claim_token", claimToken);
     const redirectQs = redirectParams.toString();
     const emailRedirectTo = redirectQs
       ? `${window.location.origin}/auth/callback?${redirectQs}`
       : `${window.location.origin}/auth/callback`;
 
     const supabase = createClient();
+    // Pass claim_token via user_metadata so the new-auth-user trigger can
+    // attach the guest player row inside the same transaction as account
+    // creation. (See migration 0026.)
+    const otpOptions: {
+      emailRedirectTo: string;
+      data?: Record<string, string>;
+    } = { emailRedirectTo };
+    if (claimToken) {
+      otpOptions.data = { claim_token: claimToken };
+    }
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo },
+      options: otpOptions,
     });
 
     if (error) {

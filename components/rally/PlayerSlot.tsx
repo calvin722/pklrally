@@ -43,7 +43,19 @@ export default function PlayerSlot({
   const [hits, setHits] = useState<PlayerHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [inviteMode, setInviteMode] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteContact, setInviteContact] = useState("");
+
+  // Auto-detect whether the invite contact is an email or a phone.
+  // - Looks like email if it contains @
+  // - Looks like phone if it has 7+ digits (+ optional +/-/space punctuation)
+  const inviteContactType = (() => {
+    const v = inviteContact.trim();
+    if (!v) return "empty" as const;
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return "email" as const;
+    const digits = v.replace(/[^\d]/g, "");
+    if (digits.length >= 10) return "phone" as const;
+    return "invalid" as const;
+  })();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Debounced search
@@ -204,7 +216,7 @@ export default function PlayerSlot({
             onClick={() => setInviteMode(true)}
             className="block w-full text-left font-display text-display-xs uppercase font-semibold tracking-wide text-pickle hover:text-bright"
           >
-            ✉ Send email invite
+            ✉ Send invite (email or text)
           </button>
         </div>
       )}
@@ -212,33 +224,54 @@ export default function PlayerSlot({
       {inviteMode && (
         <div className="mt-3 space-y-2 rounded-lg border-2 border-pickle/40 bg-pickle/5 p-3">
           <p className="text-xs text-white/70">
-            We&apos;ll email <span className="text-pickle">{query.trim()}</span>{" "}
-            with the match score and a link to join. When they sign up, this
-            match counts toward their stats.
+            Email <span className="text-pickle">{query.trim()}</span> a claim
+            link, or enter their phone and you&apos;ll get a button to text
+            the link from your own phone after saving.
           </p>
           <input
-            type="email"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
-            placeholder="email@example.com"
+            type="text"
+            inputMode="email"
+            value={inviteContact}
+            onChange={(e) => setInviteContact(e.target.value)}
+            placeholder="email@example.com or 555-123-4567"
             autoFocus
             className="w-full rounded-lg border-2 border-white/40 bg-black px-3 py-2 text-base text-white placeholder:text-white/40 focus:border-pickle focus:outline-none"
           />
+          {inviteContactType === "phone" && (
+            <p className="font-mono text-[10px] uppercase tracking-wider text-pickle">
+              ✓ Detected phone — you&apos;ll send the SMS yourself after save
+            </p>
+          )}
+          {inviteContactType === "email" && (
+            <p className="font-mono text-[10px] uppercase tracking-wider text-pickle">
+              ✓ Detected email — we&apos;ll send the invite for you
+            </p>
+          )}
+          {inviteContactType === "invalid" && (
+            <p className="font-mono text-[10px] uppercase tracking-wider text-bright">
+              Doesn&apos;t look like a valid email or phone yet
+            </p>
+          )}
           <div className="flex gap-2">
             <button
               type="button"
               disabled={
-                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail.trim())
+                inviteContactType !== "email" &&
+                inviteContactType !== "phone"
               }
               onClick={() => {
+                const v = inviteContact.trim();
                 onPick({
                   kind: "guest",
                   displayName: query.trim(),
-                  email: inviteEmail.trim(),
+                  email:
+                    inviteContactType === "email" ? v : undefined,
+                  phone:
+                    inviteContactType === "phone" ? v : undefined,
                   sendInvite: true,
                 });
                 setInviteMode(false);
-                setInviteEmail("");
+                setInviteContact("");
               }}
               className="rounded-lg bg-pickle px-3 py-1.5 font-display text-display-xs font-bold uppercase tracking-wide text-black disabled:opacity-50"
             >
@@ -248,7 +281,7 @@ export default function PlayerSlot({
               type="button"
               onClick={() => {
                 setInviteMode(false);
-                setInviteEmail("");
+                setInviteContact("");
               }}
               className="rounded-lg border-2 border-white/40 px-3 py-1.5 font-display text-display-xs uppercase font-semibold tracking-wide text-white/70 hover:border-pickle hover:text-pickle"
             >
