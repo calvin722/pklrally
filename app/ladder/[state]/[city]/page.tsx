@@ -130,10 +130,10 @@ export default async function CityLadderPage({
           <span className="sr-only">Back to PKLRALLY home</span>
         </Link>
         <Link
-          href="/ladder"
+          href={`/ladder/${stateUpper.toLowerCase()}`}
           className="font-display text-display-xs uppercase font-bold tracking-wide text-white/50 hover:text-pickle"
         >
-          All cities
+          ← {stateUpper} cities
         </Link>
       </div>
 

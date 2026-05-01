@@ -6,6 +6,7 @@ import { useState } from "react";
 import AuthButton from "@/components/AuthButton";
 import StartRallyButton from "@/components/StartRallyButton";
 import Wordmark from "@/components/Wordmark";
+import WelcomePopup from "@/components/WelcomePopup";
 import CityTimeline from "@/components/matches/CityTimeline";
 import CourtLadder from "@/components/courts/CourtLadder";
 import type { CityNode } from "@/lib/types";
@@ -27,6 +28,7 @@ export default function HomePage() {
 
   return (
     <main className="relative flex h-svh w-full flex-col overflow-hidden bg-black">
+      <WelcomePopup />
       {/* Top bar — wordmark + sign-in */}
       <header className="relative z-30 flex items-center justify-between px-4 pt-4">
         <div>

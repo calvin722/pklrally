@@ -1,26 +1,34 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { currentMonthKey, monthLabel } from "@/lib/ladder";
+import { citySlug, currentMonthKey, monthLabel } from "@/lib/ladder";
 import { stateName } from "@/lib/states";
 import Wordmark from "@/components/Wordmark";
 
 export const dynamic = "force-dynamic";
 
-interface StateRow {
-  state: string;
-  cityCount: number;
+interface PageProps {
+  params: Promise<{ state: string }>;
+}
+
+interface CityRow {
+  city: string;
+  courtCount: number;
   hasSponsor: boolean;
 }
 
 /**
- * Ladder index — drill-down entry point. Lists every active state, each
- * showing the number of active cities + whether at least one of those
- * cities has an active sponsor this month.
+ * Mid-level drill-down: lists every active city in a state with its
+ * court count + sponsor flag. Click a city to see its monthly ladder.
  */
-export default async function LadderIndexPage() {
+export default async function LadderStatePage({ params }: PageProps) {
+  const { state } = await params;
+  const code = state.toUpperCase();
+  const fullName = stateName(code);
+  if (!fullName) notFound();
+
   const supabase = await createClient();
 
-  // Effective league month (respects override)
   let monthKey = currentMonthKey();
   try {
     const { data: leagueMonth } = await supabase.rpc(
@@ -31,52 +39,42 @@ export default async function LadderIndexPage() {
     /* fall back */
   }
 
-  // Pull every active court — group by state
   const { data: courts } = await supabase
     .from("courts")
     .select("city, state")
+    .ilike("state", code)
     .eq("status", "active");
 
-  const byState = new Map<string, StateRow>();
+  const byCity = new Map<string, CityRow>();
   for (const c of courts ?? []) {
-    const key = c.state.toUpperCase();
-    const existing = byState.get(key);
+    const k = c.city.toLowerCase();
+    const existing = byCity.get(k);
     if (existing) {
-      existing.cityCount += 1;
+      existing.courtCount += 1;
     } else {
-      byState.set(key, {
-        state: key,
-        cityCount: 1,
+      byCity.set(k, {
+        city: c.city,
+        courtCount: 1,
         hasSponsor: false,
       });
     }
-  }
-  // Dedupe city count — count distinct cities per state
-  const distinctCities = new Map<string, Set<string>>();
-  for (const c of courts ?? []) {
-    const key = c.state.toUpperCase();
-    if (!distinctCities.has(key)) distinctCities.set(key, new Set());
-    distinctCities.get(key)!.add(c.city.toLowerCase());
-  }
-  for (const [state, cities] of distinctCities.entries()) {
-    const row = byState.get(state);
-    if (row) row.cityCount = cities.size;
   }
 
   // Sponsor flags
   const { data: sponsorships } = await supabase
     .from("sponsorships")
-    .select("state")
+    .select("city")
+    .ilike("state", code)
     .eq("status", "active")
     .eq("month_key", monthKey);
 
   for (const s of sponsorships ?? []) {
-    const row = byState.get(s.state.toUpperCase());
+    const row = byCity.get(s.city.toLowerCase());
     if (row) row.hasSponsor = true;
   }
 
-  const states = Array.from(byState.values()).sort((a, b) =>
-    a.state.localeCompare(b.state),
+  const cities = Array.from(byCity.values()).sort((a, b) =>
+    a.city.localeCompare(b.city),
   );
 
   return (
@@ -90,10 +88,13 @@ export default async function LadderIndexPage() {
 
         <header className="mt-8">
           <p className="font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
-            Monthly Ladder
+            <Link href="/ladder" className="hover:text-bright">
+              Monthly Ladder
+            </Link>{" "}
+            ›
           </p>
           <h1 className="mt-1 font-display text-display-3xl font-extrabold uppercase tracking-tight text-bright sm:text-display-4xl">
-            Pick your state
+            {fullName}
           </h1>
           <p className="mt-1 font-mono text-sm uppercase tracking-wide text-white/60">
             {monthLabel(monthKey)}
@@ -101,29 +102,30 @@ export default async function LadderIndexPage() {
         </header>
 
         <section className="mt-8">
-          {states.length === 0 ? (
+          {cities.length === 0 ? (
             <div className="rounded-2xl border-2 border-dashed border-white/20 p-8 text-center text-white/50">
-              No active states yet. Once courts are added in your area,
-              they&apos;ll show up here.
+              No active courts in {fullName} yet.{" "}
+              <Link href="/courts/suggest" className="text-pickle hover:underline">
+                Suggest one →
+              </Link>
             </div>
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2">
-              {states.map((s) => (
-                <li key={s.state}>
+              {cities.map((c) => (
+                <li key={c.city}>
                   <Link
-                    href={`/ladder/${s.state.toLowerCase()}`}
+                    href={`/ladder/${code.toLowerCase()}/${citySlug(c.city)}`}
                     className="flex items-center justify-between rounded-2xl border-2 border-pickle/30 bg-white/[0.03] p-4 transition hover:border-pickle hover:bg-pickle/10"
                   >
                     <div>
                       <p className="font-display text-display-md font-extrabold uppercase tracking-tight text-white">
-                        {stateName(s.state) ?? s.state}
+                        {c.city}
                       </p>
                       <p className="font-mono text-xs uppercase tracking-wider text-white/50">
-                        {s.state} · {s.cityCount} cit
-                        {s.cityCount === 1 ? "y" : "ies"}
+                        {c.courtCount} court{c.courtCount === 1 ? "" : "s"}
                       </p>
                     </div>
-                    {s.hasSponsor && (
+                    {c.hasSponsor && (
                       <span className="rounded-full border border-bright px-2 py-0.5 font-display text-[10px] uppercase font-bold tracking-widest text-bright">
                         Sponsored
                       </span>
@@ -135,12 +137,14 @@ export default async function LadderIndexPage() {
           )}
         </section>
 
-        <p className="mt-6 text-center font-mono text-[11px] uppercase tracking-wider text-white/40">
-          Don&apos;t see your state?{" "}
-          <Link href="/courts/suggest" className="text-pickle hover:underline">
-            Suggest a court
+        <div className="mt-6 flex justify-center">
+          <Link
+            href="/ladder"
+            className="font-display text-display-xs uppercase font-bold tracking-wide text-white/60 hover:text-pickle"
+          >
+            ← All states
           </Link>
-        </p>
+        </div>
       </div>
     </main>
   );
