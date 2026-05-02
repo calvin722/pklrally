@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   fetchCourtBlocks,
   joinBlock,
@@ -36,6 +37,8 @@ export default function CourtPlaySchedule({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [invitingBlockId, setInvitingBlockId] = useState<string | null>(null);
+  const pathname = usePathname();
+  const signInHref = `/login?next=${encodeURIComponent(pathname || "/play")}`;
 
   useEffect(() => {
     let alive = true;
@@ -120,12 +123,13 @@ export default function CourtPlaySchedule({
           </p>
         </button>
       ) : (
-        <div className="rounded-2xl border-2 border-dashed border-white/20 px-5 py-4 text-center">
-          <p className="text-sm text-white/60">
-            <Link href="/login" className="text-electric hover:underline">
+        <div className="rounded-2xl border-2 border-dashed border-electric/40 bg-electric/5 px-5 py-4 text-center">
+          <p className="text-sm text-white/80">
+            <Link href={signInHref} className="text-electric hover:underline font-bold">
               Sign in
             </Link>{" "}
-            to create or join open play blocks.
+            to create or join open play blocks. We&apos;ll bring you right
+            back here.
           </p>
         </div>
       )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { searchPlayers } from "@/lib/rally";
 import { inviteExistingPlayer, inviteNonMember } from "@/lib/play";
 
@@ -60,6 +61,7 @@ export default function InviteToBlockSheet({
   const [err, setErr] = useState<string | null>(null);
   const [justInvited, setJustInvited] = useState<JustInvited[]>([]);
   const queryInputRef = useRef<HTMLInputElement | null>(null);
+  const pathname = usePathname() ?? "/play";
 
   // Detect contact type
   const contactType = (() => {
@@ -182,7 +184,11 @@ export default function InviteToBlockSheet({
 
   function buildSmsHref(invite: JustInvited): string {
     if (!invite.phone || !invite.claimUrl) return "#";
-    const body = `Hey ${invite.displayName}, ${inviterName} invited you to open play at ${courtName} ${blockDayLabel} ${blockTimeRange}. Tap to confirm + claim your stats: ${invite.claimUrl}`;
+    // Append ?next=<this court page> so the recipient lands directly on
+    // the block after signing in, not on the home page.
+    const url = new URL(invite.claimUrl);
+    url.searchParams.set("next", pathname);
+    const body = `Hey ${invite.displayName}, ${inviterName} invited you to open play at ${courtName} ${blockDayLabel} ${blockTimeRange}. Tap to confirm + claim your stats: ${url.toString()}`;
     return `sms:${invite.phone}?&body=${encodeURIComponent(body)}`;
   }
 

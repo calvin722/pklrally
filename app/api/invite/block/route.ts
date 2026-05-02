@@ -127,8 +127,11 @@ export async function POST(request: Request) {
   const courtAddress = court?.address ? `<br>${escapeHtml(court.address)}` : "";
 
   // Deep link:
-  //   - members: straight to the court's play schedule (they're signed in)
-  //   - guests with token: claim URL
+  //   - members: straight to the court's play schedule (they're signed in;
+  //     if their session expired, the court page's "Sign in" link
+  //     preserves the URL via ?next=)
+  //   - guests with token: claim URL with ?next= so post-signin lands on
+  //     the court page instead of /
   //   - guests without token: generic /play
   const courtPathSlug = court
     ? `/play/${String(court.state).toLowerCase()}/${slugify(String(court.city))}/${court.id}`
@@ -136,8 +139,8 @@ export async function POST(request: Request) {
   const link = recipientIsMember
     ? `${SITE_URL}${courtPathSlug}`
     : guest.invite_token
-      ? `${SITE_URL}/c/${guest.invite_token}`
-      : `${SITE_URL}/play`;
+      ? `${SITE_URL}/c/${guest.invite_token}?next=${encodeURIComponent(courtPathSlug)}`
+      : `${SITE_URL}${courtPathSlug}`;
 
   const subject = `${callerPlayer.display_name} invited you to open play on ${new Date(block.starts_at).toLocaleDateString("en-US", { weekday: "long", timeZone: tz })}`;
 
