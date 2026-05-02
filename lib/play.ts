@@ -142,10 +142,15 @@ export async function createBlock(input: {
 
 export async function joinBlock(blockId: string, playerId: string) {
   const supabase = createClient();
+  // Upsert with ignoreDuplicates so re-clicking Join (or joining a block
+  // you already joined elsewhere) doesn't 409 — the row simply stays.
   const { error } = await supabase
     .from("open_play_attendees")
-    .insert({ block_id: blockId, player_id: playerId });
-  if (error && !/duplicate/i.test(error.message)) throw new Error(error.message);
+    .upsert(
+      { block_id: blockId, player_id: playerId },
+      { onConflict: "block_id,player_id", ignoreDuplicates: true },
+    );
+  if (error) throw new Error(error.message);
 }
 
 /**

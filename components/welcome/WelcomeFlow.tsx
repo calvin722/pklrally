@@ -13,7 +13,7 @@ interface WelcomeFlowProps {
   initialDupr: number | null;
 }
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
@@ -133,14 +133,17 @@ export default function WelcomeFlow({
         </div>
       </div>
 
-      {step === 0 && <IntroSlide onNext={() => setStep(1)} />}
+      {step === 0 && <FindOpenPlaySlide onNext={() => setStep(1)} />}
       {step === 1 && (
-        <VouchSlide onBack={() => setStep(0)} onNext={() => setStep(2)} />
+        <CreateOwnSlide onBack={() => setStep(0)} onNext={() => setStep(2)} />
       )}
       {step === 2 && (
-        <CompeteSlide onBack={() => setStep(1)} onNext={() => setStep(3)} />
+        <RecordGamesSlide onBack={() => setStep(1)} onNext={() => setStep(3)} />
       )}
       {step === 3 && (
+        <LocalPrizesSlide onBack={() => setStep(2)} onNext={() => setStep(4)} />
+      )}
+      {step === 4 && (
         <FormStep
           username={username}
           setUsername={(v) => setUsername(v.toLowerCase().replace(/\s+/g, ""))}
@@ -157,7 +160,7 @@ export default function WelcomeFlow({
           setRatingAccepted={setRatingAccepted}
           saving={saving}
           error={error}
-          onBack={() => setStep(2)}
+          onBack={() => setStep(3)}
           onSubmit={handleFinish}
         />
       )}
@@ -167,15 +170,20 @@ export default function WelcomeFlow({
 
 // ----- slides -----
 
-function IntroSlide({ onNext }: { onNext: () => void }) {
+function FindOpenPlaySlide({ onNext }: { onNext: () => void }) {
   return (
     <div className="space-y-4">
+      <span aria-hidden className="text-display-xl">📍</span>
       <h2 className="font-display text-display-2xl font-extrabold leading-tight text-bright">
-        Welcome to PKLRALLY
+        Find Open Play
       </h2>
+      <p className="font-display text-display-xs uppercase font-bold tracking-widest text-electric">
+        wherever you are
+      </p>
       <p className="text-base text-white/80 leading-relaxed">
-        Play, track & win. Log your matches and collect your stats. See your
-        ranking by court, city, state, and nationally — and soon, globally.
+        Browse open-play sessions at any local court. See a 7-day calendar of
+        what&apos;s happening, when, and who&apos;s going. Tap Join. Show up.
+        Rotate in.
       </p>
       <div className="flex justify-end pt-2">
         <NextButton onClick={onNext}>Continue ▸</NextButton>
@@ -184,7 +192,7 @@ function IntroSlide({ onNext }: { onNext: () => void }) {
   );
 }
 
-function VouchSlide({
+function CreateOwnSlide({
   onBack,
   onNext,
 }: {
@@ -193,26 +201,25 @@ function VouchSlide({
 }) {
   return (
     <div className="space-y-4">
-      <h2 className="font-display text-display-xl font-extrabold leading-tight text-bright">
-        Honest stats start with vouching
+      <span aria-hidden className="text-display-xl">＋</span>
+      <h2 className="font-display text-display-2xl font-extrabold leading-tight text-bright">
+        Or Create Your Own
       </h2>
+      <p className="font-display text-display-xs uppercase font-bold tracking-widest text-electric">
+        and bring the crew
+      </p>
       <p className="text-base text-white/80 leading-relaxed">
-        After you finish a game, log the score. We notify your opponents — they
-        confirm or dispute the result. Once an opponent vouches, the match goes
-        official and your stats update on all four players' profiles.
+        Don&apos;t see a session at the right time? Schedule one in 10 seconds
+        at any court. Invite friends by name, email, or text — they get a
+        tap-to-confirm link.
       </p>
-      <p className="text-base text-white/60 leading-relaxed">
-        No vouch = no stats. It keeps leaderboards real, prevents
-        sandbagging, and means every win in your record was earned — and
-        someone signed off on it.
-      </p>
-      <div className="rounded-xl border-2 border-pickle/40 bg-pickle/5 p-4 text-sm text-white/70 leading-relaxed">
-        <span className="font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
-          Quick tip
+      <div className="rounded-xl border-2 border-electric/40 bg-electric/5 p-4 text-sm text-white/70 leading-relaxed">
+        <span className="font-display text-display-xs uppercase font-semibold tracking-wide text-electric">
+          Bring the non-members
         </span>
         <p className="mt-1.5">
-          Played with non-members? Log them as guests — we'll send them an
-          invite to claim the match (and their stats) when they join.
+          Your friends don&apos;t need to download anything. Tap their text,
+          confirm, done.
         </p>
       </div>
       <div className="flex items-center justify-between pt-2">
@@ -223,7 +230,7 @@ function VouchSlide({
   );
 }
 
-function CompeteSlide({
+function RecordGamesSlide({
   onBack,
   onNext,
 }: {
@@ -232,36 +239,50 @@ function CompeteSlide({
 }) {
   return (
     <div className="space-y-4">
-      <h2 className="font-display text-display-xl font-extrabold leading-tight text-bright">
-        Compete locally · Collect globally
+      <span aria-hidden className="text-display-xl">▶</span>
+      <h2 className="font-display text-display-2xl font-extrabold leading-tight text-bright">
+        Record Your Games
       </h2>
-      <p className="text-base text-white/80 leading-relaxed">
-        See where you stand at four levels — at your home court, in your city,
-        across your state, and nationally. Rankings refresh every match. Local
-        rivalries finally have a scoreboard.
+      <p className="font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
+        every win counts
       </p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border-2 border-pickle/40 p-4">
-          <div className="font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
-            Trophies &amp; prizes
-          </div>
-          <p className="mt-1.5 text-sm text-white/70">
-            Earn digital trophies and badges as you play, collected forever in
-            your trophy room. Top finishers each month also win real-world
-            prizes from local sponsors — gift cards, free memberships, and
-            more.
-          </p>
-        </div>
-        <div className="rounded-xl border-2 border-electric/40 p-4">
-          <div className="font-display text-display-xs uppercase font-semibold tracking-wide text-electric">
-            Badges &amp; streaks
-          </div>
-          <p className="mt-1.5 text-sm text-white/70">
-            Unlock badges for streaks, milestones, and rare feats. Your
-            profile becomes a record of every chapter of your pickle journey.
-          </p>
-        </div>
+      <p className="text-base text-white/80 leading-relaxed">
+        After each match, log it on PKLRALLY. Your opponent vouches the score,
+        and your stats start building. The more you play, the more your record
+        speaks for itself.
+      </p>
+      <div className="flex items-center justify-between pt-2">
+        <BackButton onClick={onBack} />
+        <NextButton onClick={onNext}>Continue ▸</NextButton>
       </div>
+    </div>
+  );
+}
+
+function LocalPrizesSlide({
+  onBack,
+  onNext,
+}: {
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <span aria-hidden className="text-display-xl">🏆</span>
+      <h2 className="font-display text-display-2xl font-extrabold leading-tight text-bright">
+        Climb the Ladder for Local Prizes
+      </h2>
+      <p className="font-display text-display-xs uppercase font-bold tracking-widest text-bright">
+        every month, in every city
+      </p>
+      <p className="text-base text-white/80 leading-relaxed">
+        Each city runs its own monthly ladder. Climb it for a shot at prizes
+        from local businesses — gear, gift cards, swag from sponsors who care
+        about pickleball where you play.
+      </p>
+      <p className="text-base text-pickle font-semibold">
+        Always free for players.
+      </p>
       <div className="flex items-center justify-between pt-2">
         <BackButton onClick={onBack} />
         <NextButton onClick={onNext}>Let&apos;s set you up ▸</NextButton>

@@ -66,10 +66,12 @@ export default function CourtPlaySchedule({
     setBusy(blockId);
     try {
       await joinBlock(blockId, currentPlayerId);
-      await refresh();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to join");
+      console.error("[handleJoin] failed:", e);
     } finally {
+      // Always refresh — even if the insert errored, the DB state is
+      // truth and we want the UI to match it.
+      await refresh();
       setBusy(null);
     }
   }
@@ -79,10 +81,10 @@ export default function CourtPlaySchedule({
     setBusy(blockId);
     try {
       await leaveBlock(blockId, currentPlayerId);
-      await refresh();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to leave");
+      console.error("[handleLeave] failed:", e);
     } finally {
+      await refresh();
       setBusy(null);
     }
   }
