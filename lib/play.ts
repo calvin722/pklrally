@@ -18,6 +18,8 @@ export interface OpenPlayBlock {
 export interface BlockAttendee {
   player_id: string;
   joined_at: string;
+  /** False = invited, hasn't confirmed yet. True = going. */
+  confirmed: boolean;
   display_name: string;
   username: string | null;
   avatar_url: string | null;
@@ -64,7 +66,7 @@ export async function fetchCourtBlocks(courtId: string): Promise<BlockWithAttend
   const blockIds = blocks.map((b) => b.id);
   const { data: attendeeRows, error: attErr } = await supabase
     .from("open_play_attendees")
-    .select("block_id, player_id, joined_at")
+    .select("block_id, player_id, joined_at, confirmed")
     .in("block_id", blockIds)
     .order("joined_at", { ascending: true });
 
@@ -106,6 +108,7 @@ export async function fetchCourtBlocks(courtId: string): Promise<BlockWithAttend
     attendeesByBlock.get(row.block_id)!.push({
       player_id: row.player_id,
       joined_at: row.joined_at,
+      confirmed: row.confirmed,
       display_name: player?.display_name ?? "Player",
       username: player?.username ?? null,
       avatar_url: player?.avatar_url ?? null,
@@ -163,13 +166,15 @@ export async function createBlock(input: {
 
 export async function joinBlock(blockId: string, playerId: string) {
   const supabase = createClient();
-  // Upsert with ignoreDuplicates so re-clicking Join (or joining a block
-  // you already joined elsewhere) doesn't 409 — the row simply stays.
+  // Upsert with confirmed=true. If the player was previously invited
+  // (pending), this flips them to confirmed. If they're brand new, it
+  // creates the row already confirmed. ignoreDuplicates is OFF here so
+  // an existing pending row gets updated to confirmed.
   const { error } = await supabase
     .from("open_play_attendees")
     .upsert(
-      { block_id: blockId, player_id: playerId },
-      { onConflict: "block_id,player_id", ignoreDuplicates: true },
+      { block_id: blockId, player_id: playerId, confirmed: true },
+      { onConflict: "block_id,player_id" },
     );
   if (error) throw new Error(error.message);
 }
@@ -184,11 +189,19 @@ export async function inviteExistingPlayer(
   invitedByPlayerId: string,
 ) {
   const supabase = createClient();
-  const { error } = await supabase.from("open_play_attendees").insert({
-    block_id: blockId,
-    player_id: invitedPlayerId,
-    invited_by: invitedByPlayerId,
-  });
+  // ignoreDuplicates: don't downgrade someone who already self-joined
+  // (they're already confirmed) back to pending.
+  const { error } = await supabase
+    .from("open_play_attendees")
+    .upsert(
+      {
+        block_id: blockId,
+        player_id: invitedPlayerId,
+        invited_by: invitedByPlayerId,
+        confirmed: false,
+      },
+      { onConflict: "block_id,player_id", ignoreDuplicates: true },
+    );
   if (error && !/duplicate/i.test(error.message)) {
     throw new Error(error.message);
   }
@@ -219,11 +232,17 @@ export async function inviteNonMember(input: {
   );
 
   const supabase = createClient();
-  const { error } = await supabase.from("open_play_attendees").insert({
-    block_id: input.blockId,
-    player_id: guest.id,
-    invited_by: input.invitedByPlayerId,
-  });
+  const { error } = await supabase
+    .from("open_play_attendees")
+    .upsert(
+      {
+        block_id: input.blockId,
+        player_id: guest.id,
+        invited_by: input.invitedByPlayerId,
+        confirmed: false,
+      },
+      { onConflict: "block_id,player_id", ignoreDuplicates: true },
+    );
   if (error && !/duplicate/i.test(error.message)) {
     throw new Error(error.message);
   }

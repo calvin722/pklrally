@@ -291,14 +291,19 @@ function CalendarBlock({
 }) {
   const palette = hashToPalette(block.id);
   const isCancelled = block.status === "cancelled";
-  const youAreIn = currentPlayerId
-    ? block.attendees.some((a) => a.player_id === currentPlayerId)
-    : false;
+  // Only count CONFIRMED attendees as "going". Pending invites (someone
+  // was invited but hasn't tapped Confirm yet) are tracked elsewhere.
+  const goingAttendees = block.attendees.filter((a) => a.confirmed);
+  const myAttendance = currentPlayerId
+    ? block.attendees.find((a) => a.player_id === currentPlayerId) ?? null
+    : null;
+  const youAreGoing = myAttendance?.confirmed === true;
+  const youArePending = myAttendance != null && !myAttendance.confirmed;
 
   // Show up to 4 mini avatars, +N for overflow
   const previewCount = 4;
-  const preview = block.attendees.slice(0, previewCount);
-  const overflow = block.attendees.length - previewCount;
+  const preview = goingAttendees.slice(0, previewCount);
+  const overflow = goingAttendees.length - previewCount;
 
   return (
     <div
@@ -326,7 +331,7 @@ function CalendarBlock({
           {formatTimeShort(block.starts_at, timezone)}
         </span>
         <span className="font-mono text-[10px] font-bold">
-          {isCancelled ? "—" : `${block.attendees.length}`}
+          {isCancelled ? "—" : `${goingAttendees.length}`}
         </span>
       </div>
 
@@ -354,9 +359,9 @@ function CalendarBlock({
         </div>
       )}
 
-      {/* Action button — Join / Leave. Wrapped in a small layer that
-          stops both onClick AND onMouseDown from bubbling so the parent
-          block's tap handler doesn't open the modal at the same time. */}
+      {/* Action button — Join / Confirm / Leave. Wrapped to stop click +
+          mousedown + pointerdown propagation so the parent block tap
+          handler doesn't fire at the same time. */}
       {currentPlayerId && !isCancelled && (
         <div
           className="mt-1.5"
@@ -368,17 +373,25 @@ function CalendarBlock({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              if (youAreIn) onLeave();
-              else onJoin();
+              if (youAreGoing) onLeave();
+              else onJoin(); // covers both "+ Join" and "Confirm" paths
             }}
             disabled={isBusy}
             className={`w-full rounded-md px-2 py-1.5 font-display text-[11px] font-extrabold uppercase tracking-wider transition disabled:opacity-50 ${
-              youAreIn
+              youAreGoing
                 ? "border-2 border-[#3F3F46] bg-white text-[#18181B] hover:bg-[#F4F4F5]"
-                : "bg-electric text-black shadow-sm hover:opacity-90"
+                : youArePending
+                  ? "bg-bright text-black shadow-sm hover:opacity-90 ring-2 ring-bright/40"
+                  : "bg-electric text-black shadow-sm hover:opacity-90"
             }`}
           >
-            {isBusy ? "Saving…" : youAreIn ? "Leave" : "+ Join"}
+            {isBusy
+              ? "Saving…"
+              : youAreGoing
+                ? "Leave"
+                : youArePending
+                  ? "✓ Confirm"
+                  : "+ Join"}
           </button>
         </div>
       )}

@@ -65,26 +65,44 @@ export default function CourtPlaySchedule({
   async function handleJoin(blockId: string) {
     if (!currentPlayerId) return;
     setBusy(blockId);
-    // Optimistic update: add a placeholder attendee for the user
-    // immediately so they see the avatar appear right away. The
-    // refresh() in finally replaces it with the canonical row from DB.
-    const placeholder = {
-      player_id: currentPlayerId,
-      joined_at: new Date().toISOString(),
-      display_name: currentPlayerName ?? "You",
-      username: null,
-      avatar_url: null,
-      avatar_focal_x: null,
-      avatar_focal_y: null,
-      is_guest: false,
-    };
+    // Optimistic update: add (or confirm) the user immediately so the
+    // avatar pops into the "going" row right away. refresh() syncs to
+    // canonical state in finally.
     setBlocks((prev) =>
-      prev.map((b) =>
-        b.id === blockId &&
-        !b.attendees.some((a) => a.player_id === currentPlayerId)
-          ? { ...b, attendees: [...b.attendees, placeholder] }
-          : b,
-      ),
+      prev.map((b) => {
+        if (b.id !== blockId) return b;
+        const existing = b.attendees.find(
+          (a) => a.player_id === currentPlayerId,
+        );
+        if (existing) {
+          // Pending → confirmed
+          return {
+            ...b,
+            attendees: b.attendees.map((a) =>
+              a.player_id === currentPlayerId
+                ? { ...a, confirmed: true }
+                : a,
+            ),
+          };
+        }
+        return {
+          ...b,
+          attendees: [
+            ...b.attendees,
+            {
+              player_id: currentPlayerId,
+              joined_at: new Date().toISOString(),
+              confirmed: true,
+              display_name: currentPlayerName ?? "You",
+              username: null,
+              avatar_url: null,
+              avatar_focal_x: null,
+              avatar_focal_y: null,
+              is_guest: false,
+            },
+          ],
+        };
+      }),
     );
     try {
       await joinBlock(blockId, currentPlayerId);
@@ -272,6 +290,45 @@ export default function CourtPlaySchedule({
 }
 
 // =============================================================
+// AttendeeListRow — used in the expanded block view
+// =============================================================
+function AttendeeListRow({
+  a,
+  muted = false,
+}: {
+  a: import("@/lib/play").BlockAttendee;
+  muted?: boolean;
+}) {
+  return (
+    <li>
+      <Link
+        href={`/profile/${a.player_id}`}
+        className={`flex items-center gap-2 rounded-lg p-1.5 transition hover:bg-white/5 ${muted ? "opacity-60" : ""}`}
+      >
+        <Avatar
+          player={{
+            display_name: a.display_name,
+            avatar_url: a.avatar_url,
+            avatar_focal_x: a.avatar_focal_x,
+            avatar_focal_y: a.avatar_focal_y,
+            is_guest: a.is_guest,
+          }}
+          size="xs"
+        />
+        <span className="text-sm text-white">
+          {a.display_name}
+          {a.username && (
+            <span className="ml-1 font-mono text-xs text-white/50">
+              @{a.username}
+            </span>
+          )}
+        </span>
+      </Link>
+    </li>
+  );
+}
+
+// =============================================================
 // BlockDetailModal — pops above the calendar when a block is tapped
 // =============================================================
 function BlockDetailModal({
@@ -336,13 +393,15 @@ function BlockCard({
   onInvite: () => void;
   busy: boolean;
 }) {
-  const youAreIn = currentPlayerId
-    ? block.attendees.some((a) => a.player_id === currentPlayerId)
-    : false;
+  const myAttendance = currentPlayerId
+    ? block.attendees.find((a) => a.player_id === currentPlayerId) ?? null
+    : null;
+  const youAreGoing = myAttendance?.confirmed === true;
+  const youArePending = myAttendance != null && !myAttendance.confirmed;
   const youAreCreator = currentPlayerId === block.created_by;
-  const previewCount = 6;
-  const preview = block.attendees.slice(0, previewCount);
-  const overflow = block.attendees.length - previewCount;
+
+  const goingAttendees = block.attendees.filter((a) => a.confirmed);
+  const pendingAttendees = block.attendees.filter((a) => !a.confirmed);
 
   return (
     <li className="rounded-2xl border-2 border-electric/40 bg-black/40 p-4">
@@ -352,12 +411,17 @@ function BlockCard({
             {formatBlockTimeRange(block, timezone)}
           </p>
           <p className="mt-0.5 font-mono text-xs uppercase tracking-wider text-electric">
-            {block.attendees.length} going
+            {goingAttendees.length} going
+            {pendingAttendees.length > 0 && (
+              <span className="ml-2 text-bright/80">
+                · {pendingAttendees.length} invited
+              </span>
+            )}
           </p>
         </div>
 
         {currentPlayerId &&
-          (youAreIn ? (
+          (youAreGoing ? (
             <button
               type="button"
               onClick={onLeave}
@@ -366,6 +430,25 @@ function BlockCard({
             >
               Leave
             </button>
+          ) : youArePending ? (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onJoin}
+                disabled={busy}
+                className="rounded-lg bg-bright px-4 py-1.5 font-display text-display-xs font-bold uppercase tracking-wide text-black hover:opacity-90 disabled:opacity-50"
+              >
+                ✓ Confirm
+              </button>
+              <button
+                type="button"
+                onClick={onLeave}
+                disabled={busy}
+                className="rounded-lg border-2 border-white/30 px-3 py-1.5 font-display text-display-xs font-bold uppercase tracking-wide text-white/70 hover:border-bright hover:text-bright disabled:opacity-50"
+              >
+                Decline
+              </button>
+            </div>
           ) : (
             <button
               type="button"
@@ -378,41 +461,85 @@ function BlockCard({
           ))}
       </div>
 
+      {/* Pending-invite banner — only show to the invitee */}
+      {youArePending && (
+        <p className="mt-3 rounded-lg border-2 border-bright/40 bg-bright/5 px-3 py-2 text-sm text-bright">
+          You were invited to this session — tap{" "}
+          <span className="font-bold">✓ Confirm</span> if you can make it.
+        </p>
+      )}
+
       {block.notes && (
         <p className="mt-2 text-sm text-white/70">{block.notes}</p>
       )}
 
-      {/* Attendees preview row */}
-      {preview.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {preview.map((a) => (
-            <Link
-              key={a.player_id}
-              href={`/profile/${a.player_id}`}
-              title={a.display_name}
-            >
-              <Avatar
-                player={{
-                  display_name: a.display_name,
-                  avatar_url: a.avatar_url,
-                  avatar_focal_x: a.avatar_focal_x,
-                  avatar_focal_y: a.avatar_focal_y,
-                  is_guest: a.is_guest,
-                }}
-                size="sm"
-              />
-            </Link>
-          ))}
-          {overflow > 0 && (
-            <button
-              type="button"
-              onClick={onToggleExpand}
-              className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-electric font-mono text-xs font-bold text-electric hover:bg-electric hover:text-black"
-              aria-label={`Show all ${block.attendees.length} attendees`}
-            >
-              +{overflow}
-            </button>
-          )}
+      {/* Going avatars preview */}
+      {goingAttendees.length > 0 && (
+        <div className="mt-3">
+          <p className="font-display text-[10px] uppercase font-bold tracking-widest text-pickle">
+            Going
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {goingAttendees.slice(0, 6).map((a) => (
+              <Link
+                key={a.player_id}
+                href={`/profile/${a.player_id}`}
+                title={a.display_name}
+              >
+                <Avatar
+                  player={{
+                    display_name: a.display_name,
+                    avatar_url: a.avatar_url,
+                    avatar_focal_x: a.avatar_focal_x,
+                    avatar_focal_y: a.avatar_focal_y,
+                    is_guest: a.is_guest,
+                  }}
+                  size="sm"
+                />
+              </Link>
+            ))}
+            {goingAttendees.length > 6 && (
+              <span className="font-mono text-xs text-white/50">
+                +{goingAttendees.length - 6}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Invited (pending) avatars preview — separate from "going" so
+          the going count stays honest. Shown in muted/dashed style. */}
+      {pendingAttendees.length > 0 && (
+        <div className="mt-3">
+          <p className="font-display text-[10px] uppercase font-bold tracking-widest text-bright">
+            Invited · waiting on confirmation
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {pendingAttendees.slice(0, 6).map((a) => (
+              <Link
+                key={a.player_id}
+                href={`/profile/${a.player_id}`}
+                title={a.display_name}
+                className="opacity-50 grayscale"
+              >
+                <Avatar
+                  player={{
+                    display_name: a.display_name,
+                    avatar_url: a.avatar_url,
+                    avatar_focal_x: a.avatar_focal_x,
+                    avatar_focal_y: a.avatar_focal_y,
+                    is_guest: a.is_guest,
+                  }}
+                  size="sm"
+                />
+              </Link>
+            ))}
+            {pendingAttendees.length > 6 && (
+              <span className="font-mono text-xs text-white/40">
+                +{pendingAttendees.length - 6}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
@@ -441,35 +568,32 @@ function BlockCard({
           {block.attendees.length === 0 ? (
             <p className="text-sm text-white/40">No one yet — be the first.</p>
           ) : (
-            <ul className="space-y-1.5">
-              {block.attendees.map((a) => (
-                <li key={a.player_id}>
-                  <Link
-                    href={`/profile/${a.player_id}`}
-                    className="flex items-center gap-2 rounded-lg p-1.5 transition hover:bg-white/5"
-                  >
-                    <Avatar
-                      player={{
-                        display_name: a.display_name,
-                        avatar_url: a.avatar_url,
-                        avatar_focal_x: a.avatar_focal_x,
-                        avatar_focal_y: a.avatar_focal_y,
-                        is_guest: a.is_guest,
-                      }}
-                      size="xs"
-                    />
-                    <span className="text-sm text-white">
-                      {a.display_name}
-                      {a.username && (
-                        <span className="ml-1 font-mono text-xs text-white/50">
-                          @{a.username}
-                        </span>
-                      )}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-4">
+              {goingAttendees.length > 0 && (
+                <div>
+                  <p className="font-display text-[10px] uppercase font-bold tracking-widest text-pickle">
+                    Going · {goingAttendees.length}
+                  </p>
+                  <ul className="mt-1.5 space-y-1.5">
+                    {goingAttendees.map((a) => (
+                      <AttendeeListRow key={a.player_id} a={a} />
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {pendingAttendees.length > 0 && (
+                <div>
+                  <p className="font-display text-[10px] uppercase font-bold tracking-widest text-bright">
+                    Invited · waiting on confirmation · {pendingAttendees.length}
+                  </p>
+                  <ul className="mt-1.5 space-y-1.5">
+                    {pendingAttendees.map((a) => (
+                      <AttendeeListRow key={a.player_id} a={a} muted />
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           )}
 
           {youAreCreator && (
