@@ -65,13 +65,32 @@ export default function CourtPlaySchedule({
   async function handleJoin(blockId: string) {
     if (!currentPlayerId) return;
     setBusy(blockId);
+    // Optimistic update: add a placeholder attendee for the user
+    // immediately so they see the avatar appear right away. The
+    // refresh() in finally replaces it with the canonical row from DB.
+    const placeholder = {
+      player_id: currentPlayerId,
+      joined_at: new Date().toISOString(),
+      display_name: currentPlayerName ?? "You",
+      username: null,
+      avatar_url: null,
+      avatar_focal_x: null,
+      avatar_focal_y: null,
+      is_guest: false,
+    };
+    setBlocks((prev) =>
+      prev.map((b) =>
+        b.id === blockId &&
+        !b.attendees.some((a) => a.player_id === currentPlayerId)
+          ? { ...b, attendees: [...b.attendees, placeholder] }
+          : b,
+      ),
+    );
     try {
       await joinBlock(blockId, currentPlayerId);
     } catch (e) {
       console.error("[handleJoin] failed:", e);
     } finally {
-      // Always refresh — even if the insert errored, the DB state is
-      // truth and we want the UI to match it.
       await refresh();
       setBusy(null);
     }
@@ -80,6 +99,19 @@ export default function CourtPlaySchedule({
   async function handleLeave(blockId: string) {
     if (!currentPlayerId) return;
     setBusy(blockId);
+    // Optimistic remove
+    setBlocks((prev) =>
+      prev.map((b) =>
+        b.id === blockId
+          ? {
+              ...b,
+              attendees: b.attendees.filter(
+                (a) => a.player_id !== currentPlayerId,
+              ),
+            }
+          : b,
+      ),
+    );
     try {
       await leaveBlock(blockId, currentPlayerId);
     } catch (e) {

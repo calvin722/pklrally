@@ -57,43 +57,61 @@ export async function fetchCourtBlocks(courtId: string): Promise<BlockWithAttend
 
   if (blocks.length === 0) return [];
 
-  // Pull every attendee for these blocks
+  // Pull attendees + players in two separate queries and stitch in JS.
+  // Doing it as a single PostgREST embedded join was silently dropping
+  // rows when the player embed returned null (e.g. transient RLS hiccup).
+  // Two queries are slightly more verbose but bulletproof.
   const blockIds = blocks.map((b) => b.id);
-  const { data: attendeeRows } = await supabase
+  const { data: attendeeRows, error: attErr } = await supabase
     .from("open_play_attendees")
-    .select(
-      `block_id, player_id, joined_at,
-       player:players (
-         id, display_name, username, avatar_url,
-         avatar_focal_x, avatar_focal_y, is_guest
-       )`,
-    )
+    .select("block_id, player_id, joined_at")
     .in("block_id", blockIds)
     .order("joined_at", { ascending: true });
 
+  if (attErr) {
+    console.error("fetchCourtBlocks attendees query failed:", attErr);
+  }
+
+  const playerIds = Array.from(
+    new Set((attendeeRows ?? []).map((r) => r.player_id)),
+  );
+
+  const { data: playerRows } = playerIds.length
+    ? await supabase
+        .from("players")
+        .select(
+          "id, display_name, username, avatar_url, avatar_focal_x, avatar_focal_y, is_guest",
+        )
+        .in("id", playerIds)
+    : { data: [] as Array<{
+        id: string;
+        display_name: string;
+        username: string | null;
+        avatar_url: string | null;
+        avatar_focal_x: number | null;
+        avatar_focal_y: number | null;
+        is_guest: boolean;
+      }> };
+
+  const playersById = new Map(
+    (playerRows ?? []).map((p) => [p.id, p] as const),
+  );
+
   const attendeesByBlock = new Map<string, BlockAttendee[]>();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const j = (v: any) => (Array.isArray(v) ? v[0] : v);
-  for (const row of (attendeeRows ?? []) as Array<{
-    block_id: string;
-    player_id: string;
-    joined_at: string;
-    player: unknown;
-  }>) {
-    const player = j(row.player);
-    if (!player) continue;
+  for (const row of attendeeRows ?? []) {
     if (!attendeesByBlock.has(row.block_id)) {
       attendeesByBlock.set(row.block_id, []);
     }
+    const player = playersById.get(row.player_id);
     attendeesByBlock.get(row.block_id)!.push({
       player_id: row.player_id,
       joined_at: row.joined_at,
-      display_name: player.display_name,
-      username: player.username,
-      avatar_url: player.avatar_url,
-      avatar_focal_x: player.avatar_focal_x,
-      avatar_focal_y: player.avatar_focal_y,
-      is_guest: player.is_guest,
+      display_name: player?.display_name ?? "Player",
+      username: player?.username ?? null,
+      avatar_url: player?.avatar_url ?? null,
+      avatar_focal_x: player?.avatar_focal_x ?? null,
+      avatar_focal_y: player?.avatar_focal_y ?? null,
+      is_guest: player?.is_guest ?? false,
     });
   }
 
@@ -124,17 +142,20 @@ export async function createBlock(input: {
     .single();
   if (error) throw new Error(error.message);
 
-  // Defense in depth: explicitly add the creator as the first attendee.
-  // Migration 0027's trigger should already do this server-side, but if
-  // the trigger isn't installed (older databases) we want the creator to
-  // appear in the attendee list immediately. Duplicate insert is safely
-  // ignored on the client.
-  try {
-    await supabase
-      .from("open_play_attendees")
-      .insert({ block_id: data.id, player_id: input.createdBy });
-  } catch {
-    /* trigger already inserted — ignore duplicate-key error */
+  // Defense in depth: explicitly add the creator as the first attendee
+  // via upsert. Migration 0027's trigger should already do this server-
+  // side; the upsert is idempotent so it's safe either way.
+  const { error: attErr } = await supabase
+    .from("open_play_attendees")
+    .upsert(
+      { block_id: data.id, player_id: input.createdBy },
+      { onConflict: "block_id,player_id", ignoreDuplicates: true },
+    );
+  if (attErr) {
+    console.error(
+      "createBlock: failed to add creator as attendee:",
+      attErr,
+    );
   }
 
   return data;
