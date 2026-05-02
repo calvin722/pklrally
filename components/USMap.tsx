@@ -8,11 +8,10 @@ import {
   Marker,
   ZoomableGroup,
 } from "react-simple-maps";
-import { useRouter } from "next/navigation";
 import { fetchCityNodes, isCityBuzzing } from "@/lib/courts";
 import type { CityNode } from "@/lib/types";
 import { useTheme } from "@/components/ThemeProvider";
-import { stateCode } from "@/lib/states";
+import { stateCode, stateName, STATE_VIEWS } from "@/lib/states";
 
 const US_TOPO_URL =
   "https://cdn.jsdelivr.net/npm/us-atlas@3.0.1/states-10m.json";
@@ -22,12 +21,18 @@ interface USMapProps {
 }
 
 export default function USMap({ onCitySelect }: USMapProps) {
-  const router = useRouter();
   const [hoveredCity, setHoveredCity] = useState<string | null>(null);
   const [rawCities, setRawCities] = useState<CityNode[]>([]);
   const [legendExpanded, setLegendExpanded] = useState(true);
+  // Selected state for in-page zoom — null = full US view
+  const [selectedState, setSelectedState] = useState<string | null>(null);
   const theme = useTheme();
   const isLight = theme === "light";
+
+  const targetStateName = selectedState ? stateName(selectedState) : null;
+  const view = selectedState
+    ? STATE_VIEWS[selectedState] ?? { center: [-96, 38] as [number, number], zoom: 1 }
+    : { center: [-96, 38] as [number, number], zoom: 1 };
 
   // Theme-aware map colors. CSS can't reach inline SVG attributes, so we
   // swap them here based on the current data-theme.
@@ -91,48 +96,88 @@ export default function USMap({ onCitySelect }: USMapProps) {
         style={{ width: "100%", height: "100%" }}
       >
         <ZoomableGroup
-          center={[-96, 38]}
-          zoom={1}
+          center={view.center}
+          zoom={view.zoom}
           minZoom={1}
-          maxZoom={8}
-          translateExtent={[
-            [-200, -100],
-            [1000, 600],
-          ]}
+          maxZoom={20}
         >
           <Geographies geography={US_TOPO_URL}>
             {({ geographies }) =>
-              geographies.map((geo) => (
-                <Geography
-                  key={geo.rsmKey}
-                  geography={geo}
-                  fill={mapColors.stateFill}
-                  stroke={mapColors.stateStroke}
-                  strokeWidth={0.6}
-                  onClick={() => {
-                    const code = stateCode(geo.properties.name ?? "");
-                    if (code) {
-                      router.push(`/play/${code.toLowerCase()}`);
+              geographies.map((geo) => {
+                const isSelected =
+                  targetStateName &&
+                  geo.properties.name?.toLowerCase() ===
+                    targetStateName.toLowerCase();
+                return (
+                  <Geography
+                    key={geo.rsmKey}
+                    geography={geo}
+                    fill={
+                      isSelected
+                        ? isLight
+                          ? "#FFFFFF"
+                          : "#0a0a0a"
+                        : mapColors.stateFill
                     }
-                  }}
-                  style={{
-                    default: { outline: "none", cursor: "pointer" },
-                    hover: { outline: "none", fill: mapColors.stateHover, cursor: "pointer" },
-                    pressed: { outline: "none", fill: mapColors.stateHover, cursor: "pointer" },
-                  }}
-                />
-              ))
+                    stroke={
+                      isSelected
+                        ? mapColors.stateStroke
+                        : selectedState
+                          ? isLight
+                            ? "#D4D4D8"
+                            : "rgba(92, 153, 0, 0.18)"
+                          : mapColors.stateStroke
+                    }
+                    strokeWidth={isSelected ? 1 : 0.6}
+                    onClick={() => {
+                      const code = stateCode(geo.properties.name ?? "");
+                      if (!code) return;
+                      // Toggle: tapping the same state again zooms back out;
+                      // tapping a different state switches to it.
+                      setSelectedState((current) =>
+                        current === code ? null : code,
+                      );
+                    }}
+                    style={{
+                      default: { outline: "none", cursor: "pointer" },
+                      hover: {
+                        outline: "none",
+                        fill: mapColors.stateHover,
+                        cursor: "pointer",
+                      },
+                      pressed: {
+                        outline: "none",
+                        fill: mapColors.stateHover,
+                        cursor: "pointer",
+                      },
+                    }}
+                  />
+                );
+              })
             }
           </Geographies>
 
           {cities.map((city) => {
             const key = `${city.city}-${city.state}`;
             const isHovered = hoveredCity === key;
-            const r = Math.min(7, Math.max(4, 3 + city.recentMatches / 40));
+
+            // When zoomed into a state, hide cities that aren't in it.
+            const inSelectedState =
+              !selectedState ||
+              city.state.toUpperCase() === selectedState;
+            if (!inSelectedState) return null;
+
+            // Scale dot + label down inversely with zoom so they stay at a
+            // consistent screen size when zoomed into a state.
+            const z = view.zoom;
+            const baseR = Math.min(7, Math.max(4, 3 + city.recentMatches / 40));
+            const r = baseR / z;
+            const fontSize = 13 / z;
+            const labelGap = 5 / z;
+            const labelStrokeWidth = 3 / z;
 
             // Cities with at least one private court use the electric-blue
-            // palette. Pure-public cities use the pickle-green palette. Both
-            // colors have buzzing variants for recent activity.
+            // palette. Pure-public cities use the pickle-green palette.
             const isPrivate = city.hasPrivate;
             const buzzClass = city.buzzing
               ? isPrivate
@@ -166,24 +211,26 @@ export default function USMap({ onCitySelect }: USMapProps) {
                     r={r}
                     fill={dotFill}
                     stroke={mapColors.dotStroke}
-                    strokeWidth={1}
+                    strokeWidth={1 / z}
                   />
                 </g>
 
-                {(city.buzzing || isHovered) && (
+                {(city.buzzing || isHovered || selectedState) && (
                   <text
-                    x={r + 5}
-                    y={4}
+                    x={r + labelGap}
+                    y={fontSize / 3}
                     textAnchor="start"
                     fill={mapColors.labelFill}
                     style={{
                       fontFamily: "var(--font-display), system-ui, sans-serif",
                       fontWeight: 700,
-                      fontSize: 13,
+                      fontSize,
                       paintOrder: "stroke",
                       stroke: mapColors.labelStroke,
-                      strokeWidth: 3,
+                      strokeWidth: labelStrokeWidth,
                       strokeLinejoin: "round",
+                      pointerEvents: "none",
+                      opacity: city.buzzing || isHovered ? 1 : 0.85,
                     }}
                   >
                     {city.city}
@@ -194,6 +241,24 @@ export default function USMap({ onCitySelect }: USMapProps) {
           })}
         </ZoomableGroup>
       </ComposableMap>
+
+      {/* Zoomed-state header + back button */}
+      {selectedState && (
+        <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-xl border-2 border-pickle bg-black/85 px-3 py-2 backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => setSelectedState(null)}
+            className="font-display text-display-xs uppercase font-bold tracking-wide text-pickle hover:text-bright"
+            aria-label="Back to US map"
+          >
+            ← All states
+          </button>
+          <span className="text-white/30">·</span>
+          <span className="font-display text-display-xs uppercase font-bold tracking-wide text-bright">
+            {targetStateName}
+          </span>
+        </div>
+      )}
 
       {/* Legend — auto-collapses to a small badge after a few seconds */}
       {legendExpanded ? (

@@ -9,12 +9,12 @@ import {
   leaveBlock,
   cancelBlock,
   createBlock,
-  groupBlocksByDay,
   formatBlockTimeRange,
   type BlockWithAttendees,
 } from "@/lib/play";
 import Avatar from "@/components/Avatar";
 import InviteToBlockSheet from "@/components/play/InviteToBlockSheet";
+import WeekCalendar from "@/components/play/WeekCalendar";
 
 interface Props {
   courtId: string;
@@ -100,10 +100,7 @@ export default function CourtPlaySchedule({
     }
   }
 
-  const days = groupBlocksByDay(
-    blocks.filter((b) => b.status === "open"),
-    timezone,
-  );
+  const openBlocks = blocks.filter((b) => b.status === "open");
   const cancelled = blocks.filter((b) => b.status === "cancelled");
 
   return (
@@ -134,67 +131,48 @@ export default function CourtPlaySchedule({
         </div>
       )}
 
-      {/* Blocks list */}
+      {/* Calendar grid */}
       <section className="mt-6">
         {loading ? (
           <p className="py-8 text-center text-sm text-white/40 animate-pulse">
             Loading...
           </p>
-        ) : days.length === 0 && cancelled.length === 0 ? (
+        ) : openBlocks.length === 0 && cancelled.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-white/20 p-8 text-center text-white/50">
             No games scheduled at {courtName} yet. Be the first to add a
             block — anyone in the area will see it.
           </div>
         ) : (
-          <div className="space-y-6">
-            {days.map((day) => (
-              <div key={day.key}>
-                <div className="mb-2 flex items-baseline gap-3">
-                  <h2 className="font-display text-display-md font-extrabold uppercase tracking-tight text-bright">
-                    {day.label}
-                  </h2>
-                  <p className="font-mono text-xs uppercase tracking-wider text-white/50">
-                    {day.subLabel}
-                  </p>
+          <>
+            <WeekCalendar
+              blocks={blocks}
+              timezone={timezone}
+              selectedBlockId={expandedId}
+              onSelectBlock={setExpandedId}
+            />
+
+            {/* Expanded block details panel */}
+            {expandedId && (() => {
+              const b = blocks.find((x) => x.id === expandedId);
+              if (!b) return null;
+              return (
+                <div className="mt-4">
+                  <BlockCard
+                    block={b}
+                    timezone={timezone}
+                    currentPlayerId={currentPlayerId}
+                    isExpanded
+                    onToggleExpand={() => setExpandedId(null)}
+                    onJoin={() => handleJoin(b.id)}
+                    onLeave={() => handleLeave(b.id)}
+                    onCancel={() => handleCancel(b.id)}
+                    onInvite={() => setInvitingBlockId(b.id)}
+                    busy={busy === b.id}
+                  />
                 </div>
-                <ul className="space-y-2">
-                  {day.blocks.map((b) => (
-                    <BlockCard
-                      key={b.id}
-                      block={b}
-                      timezone={timezone}
-                      currentPlayerId={currentPlayerId}
-                      isExpanded={expandedId === b.id}
-                      onToggleExpand={() =>
-                        setExpandedId((v) => (v === b.id ? null : b.id))
-                      }
-                      onJoin={() => handleJoin(b.id)}
-                      onLeave={() => handleLeave(b.id)}
-                      onCancel={() => handleCancel(b.id)}
-                      onInvite={() => setInvitingBlockId(b.id)}
-                      busy={busy === b.id}
-                    />
-                  ))}
-                </ul>
-              </div>
-            ))}
-            {cancelled.length > 0 && (
-              <details className="rounded-xl border border-white/15 px-3 py-2">
-                <summary className="cursor-pointer font-display text-display-xs uppercase font-bold tracking-widest text-white/40">
-                  Cancelled this week ({cancelled.length})
-                </summary>
-                <ul className="mt-2 space-y-1 text-xs text-white/40">
-                  {cancelled.map((b) => (
-                    <li key={b.id}>
-                      <span className="line-through">
-                        {formatBlockTimeRange(b, timezone)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
-          </div>
+              );
+            })()}
+          </>
         )}
       </section>
 
@@ -297,18 +275,18 @@ function BlockCard({
               type="button"
               onClick={onLeave}
               disabled={busy}
-              className="rounded-lg border-2 border-pickle px-3 py-1.5 font-display text-display-xs font-bold uppercase tracking-wide text-pickle hover:bg-pickle hover:text-black disabled:opacity-50"
+              className="rounded-lg border-2 border-pickle px-4 py-1.5 font-display text-display-xs font-bold uppercase tracking-wide text-pickle hover:bg-pickle hover:text-black disabled:opacity-50"
             >
-              ✓ I&apos;m in · leave
+              Leave
             </button>
           ) : (
             <button
               type="button"
               onClick={onJoin}
               disabled={busy}
-              className="rounded-lg bg-electric px-4 py-1.5 font-display text-display-xs font-bold uppercase tracking-wide text-black hover:opacity-90 disabled:opacity-50"
+              className="rounded-lg bg-electric px-5 py-1.5 font-display text-display-xs font-bold uppercase tracking-wide text-black hover:opacity-90 disabled:opacity-50"
             >
-              I&apos;m in
+              Join
             </button>
           ))}
       </div>

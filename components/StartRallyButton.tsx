@@ -6,8 +6,8 @@ interface StartRallyButtonProps {
 }
 
 /**
- * Chunky "Start Rally" call-to-action.
- * Position-agnostic — parent decides where it sits.
+ * Chunky "Record Your Rally" call-to-action — matches FindGameButton's
+ * two-line layout. Position-agnostic.
  */
 export default function StartRallyButton({
   onClick,
@@ -20,17 +20,22 @@ export default function StartRallyButton({
       className={`
         soft-stamp
         rounded-xl
-        bg-pickle px-6 py-4
-        font-display text-display-base font-extrabold uppercase tracking-wide text-black
+        bg-pickle px-5 py-3
+        font-display font-extrabold uppercase tracking-wide text-black
         transition-transform
         focus:outline-none focus-visible:ring-4 focus-visible:ring-bright/60
         ${className}
       `}
-      aria-label="Start a new rally"
+      aria-label="Record a rally to earn ladder points"
     >
-      <span className="inline-flex items-center justify-center gap-3">
-        <span aria-hidden>▶</span>
-        Start Rally
+      <span className="flex flex-col items-center justify-center leading-tight">
+        <span className="text-display-base">
+          <span aria-hidden className="mr-2">▶</span>
+          Record Your Rally
+        </span>
+        <span className="mt-0.5 text-[10px] font-bold tracking-widest opacity-80">
+          earn points → ladder prizes
+        </span>
       </span>
     </button>
   );
