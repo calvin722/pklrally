@@ -8,7 +8,7 @@ interface WeekCalendarProps {
   timezone: string;
   /** Hour the calendar starts displaying (default 8 = 8 AM) */
   startHour?: number;
-  /** Hour the calendar ends displaying (default 22 = 10 PM) */
+  /** Hour the calendar ends displaying (default 21 = 9 PM) */
   endHour?: number;
   /** Currently expanded block id, or null */
   selectedBlockId: string | null;
@@ -18,20 +18,21 @@ interface WeekCalendarProps {
 // Each hour gets this many pixels of vertical space
 const HOUR_HEIGHT = 56;
 
-// Color palette — block ids hash to one of these. Tints are tuned
-// for a white background so the calendar reads cleanly in light mode.
+// Color palette for block backgrounds. Tailwind's custom config doesn't
+// include zinc/amber/purple/rose/teal, so we use arbitrary hex literals
+// (bg-[#xxx]) which always generate. Tints are tuned for a cool-gray
+// calendar background.
 const BLOCK_PALETTE: Array<{
   bg: string;
   border: string;
-  text: string;
   badge: string;
 }> = [
-  { bg: "bg-pickle/30", border: "border-pickle", text: "text-zinc-900", badge: "bg-pickle" },
-  { bg: "bg-electric/25", border: "border-electric", text: "text-zinc-900", badge: "bg-electric" },
-  { bg: "bg-amber-300", border: "border-amber-600", text: "text-zinc-900", badge: "bg-amber-500" },
-  { bg: "bg-purple-300", border: "border-purple-600", text: "text-zinc-900", badge: "bg-purple-500" },
-  { bg: "bg-rose-300", border: "border-rose-600", text: "text-zinc-900", badge: "bg-rose-500" },
-  { bg: "bg-teal-300", border: "border-teal-600", text: "text-zinc-900", badge: "bg-teal-500" },
+  { bg: "bg-[#D9F99D]", border: "border-[#65A30D]", badge: "bg-[#65A30D]" },   // lime
+  { bg: "bg-[#BAE6FD]", border: "border-[#0284C7]", badge: "bg-[#0284C7]" },   // sky blue
+  { bg: "bg-[#FED7AA]", border: "border-[#EA580C]", badge: "bg-[#EA580C]" },   // amber
+  { bg: "bg-[#E9D5FF]", border: "border-[#9333EA]", badge: "bg-[#9333EA]" },   // purple
+  { bg: "bg-[#FECDD3]", border: "border-[#E11D48]", badge: "bg-[#E11D48]" },   // rose
+  { bg: "bg-[#99F6E4]", border: "border-[#0D9488]", badge: "bg-[#0D9488]" },   // teal
 ];
 
 function hashToPalette(id: string): (typeof BLOCK_PALETTE)[number] {
@@ -47,7 +48,7 @@ export default function WeekCalendar({
   blocks,
   timezone,
   startHour = 8,
-  endHour = 22,
+  endHour = 21,
   selectedBlockId,
   onSelectBlock,
 }: WeekCalendarProps) {
@@ -107,7 +108,7 @@ export default function WeekCalendar({
               className={`flex shrink-0 flex-col items-center rounded-lg border-2 px-3 py-1.5 transition ${
                 active
                   ? "border-electric bg-electric text-black"
-                  : "border-zinc-300 bg-white text-zinc-700"
+                  : "border-[#D4D4D8] bg-[#F4F4F5] text-[#3F3F46]"
               }`}
             >
               <span className="font-display text-[10px] uppercase font-bold tracking-widest">
@@ -124,30 +125,37 @@ export default function WeekCalendar({
         })}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border-2 border-zinc-300 bg-white shadow-2xl">
+      <div className="overflow-hidden rounded-2xl border-2 border-[#D4D4D8] bg-[#F4F4F5] shadow-2xl">
         {/* Day-of-week header row (desktop only) */}
-        <div className="hidden border-b-2 border-zinc-200 sm:grid sm:grid-cols-[60px_repeat(7,1fr)]">
+        <div className="hidden border-b-2 border-[#D4D4D8] bg-[#FAFAFA] sm:grid sm:grid-cols-[60px_repeat(7,1fr)]">
           <div />
-          {days.map((d) => (
-            <div
-              key={d.key}
-              className="border-l border-zinc-200 px-2 py-2 text-center"
-            >
-              <p className="font-display text-[10px] uppercase font-bold tracking-widest text-zinc-500">
-                {d.shortDay}
-              </p>
-              <p className="font-mono text-sm font-bold text-zinc-900">
-                {d.dayNum}
-              </p>
-            </div>
-          ))}
+          {days.map((d, i) => {
+            const isToday = i === 0;
+            return (
+              <div
+                key={d.key}
+                className="border-l border-[#E4E4E7] px-2 py-2 text-center"
+              >
+                <p
+                  className={`font-display text-[10px] uppercase font-bold tracking-widest ${
+                    isToday ? "text-electric" : "text-[#71717A]"
+                  }`}
+                >
+                  {isToday ? "TODAY" : d.shortDay}
+                </p>
+                <p className="font-mono text-sm font-bold text-[#18181B]">
+                  {d.dayNum}
+                </p>
+              </div>
+            );
+          })}
         </div>
 
         {/* Time grid */}
         <div className="grid grid-cols-[60px_1fr] sm:grid-cols-[60px_repeat(7,1fr)]">
           {/* Hours column */}
           <div
-            className="relative border-r border-zinc-200"
+            className="relative border-r border-[#D4D4D8] bg-[#FAFAFA]"
             style={{ height: totalHeight }}
           >
             {hours.map((h, i) => {
@@ -155,13 +163,13 @@ export default function WeekCalendar({
               return (
                 <div
                   key={h}
-                  className="absolute left-0 right-0 border-b border-zinc-100 px-2"
+                  className="absolute left-0 right-0 border-b border-[#E4E4E7] px-2"
                   style={{
                     top: (h - effectiveStart) * HOUR_HEIGHT,
                     height: HOUR_HEIGHT,
                   }}
                 >
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400">
+                  <span className="font-mono text-[10px] uppercase tracking-wider font-bold text-[#52525B]">
                     {formatHour(h)}
                   </span>
                 </div>
@@ -172,14 +180,11 @@ export default function WeekCalendar({
           {/* Day columns */}
           {days.map((d, dayIdx) => {
             const dayBlocks = blocksByDay.get(d.key) ?? [];
-            const visible =
-              // Desktop: always show. Mobile: only show the active day.
-              true;
             const isActiveDayMobile = dayIdx === activeDayIdx;
             return (
               <div
                 key={d.key}
-                className={`relative border-l border-zinc-200 ${
+                className={`relative border-l border-[#E4E4E7] bg-[#F4F4F5] ${
                   isActiveDayMobile ? "block" : "hidden"
                 } sm:block`}
                 style={{ height: totalHeight }}
@@ -190,7 +195,7 @@ export default function WeekCalendar({
                   return (
                     <div
                       key={h}
-                      className="absolute left-0 right-0 border-b border-zinc-100"
+                      className="absolute left-0 right-0 border-b border-[#E4E4E7]"
                       style={{
                         top: (h - effectiveStart) * HOUR_HEIGHT,
                         height: HOUR_HEIGHT,
@@ -200,55 +205,54 @@ export default function WeekCalendar({
                 })}
 
                 {/* Blocks */}
-                {visible &&
-                  dayBlocks.map((b) => {
-                    const startH = hourFractionInTz(b.starts_at, timezone);
-                    const endH = hourFractionInTz(b.ends_at, timezone);
-                    const top = (startH - effectiveStart) * HOUR_HEIGHT;
-                    const height = Math.max(
-                      24,
-                      (endH - startH) * HOUR_HEIGHT,
-                    );
-                    const palette = hashToPalette(b.id);
-                    const isCancelled = b.status === "cancelled";
-                    const isSelected = selectedBlockId === b.id;
-                    return (
-                      <button
-                        key={b.id}
-                        type="button"
-                        onClick={() =>
-                          onSelectBlock(isSelected ? null : b.id)
-                        }
-                        className={`absolute left-1 right-1 overflow-hidden rounded-md border-2 px-1.5 py-1 text-left transition ${palette.border} ${
-                          isCancelled
-                            ? "bg-zinc-200 opacity-60"
-                            : palette.bg
-                        } ${palette.text} ${
-                          isSelected
-                            ? "ring-2 ring-offset-1 ring-electric z-10"
-                            : "hover:opacity-90"
-                        }`}
-                        style={{ top, height }}
-                      >
-                        <div className="flex items-center gap-1">
-                          <span
-                            className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${palette.badge}`}
-                            aria-hidden
-                          />
-                          <span className="truncate font-mono text-[10px] font-bold">
-                            {formatTimeShort(b.starts_at, timezone)}
-                          </span>
-                        </div>
-                        <p className="truncate text-[11px] font-semibold leading-tight">
-                          {isCancelled ? (
-                            <span className="line-through">Cancelled</span>
-                          ) : (
-                            `${b.attendees.length} going`
-                          )}
-                        </p>
-                      </button>
-                    );
-                  })}
+                {dayBlocks.map((b) => {
+                  const startH = hourFractionInTz(b.starts_at, timezone);
+                  const endH = hourFractionInTz(b.ends_at, timezone);
+                  const top = (startH - effectiveStart) * HOUR_HEIGHT;
+                  const height = Math.max(
+                    32,
+                    (endH - startH) * HOUR_HEIGHT,
+                  );
+                  const palette = hashToPalette(b.id);
+                  const isCancelled = b.status === "cancelled";
+                  const isSelected = selectedBlockId === b.id;
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() =>
+                        onSelectBlock(isSelected ? null : b.id)
+                      }
+                      className={`absolute left-1 right-1 overflow-hidden rounded-md border-2 px-1.5 py-1 text-left text-[#18181B] transition ${palette.border} ${
+                        isCancelled
+                          ? "bg-[#E4E4E7] opacity-60"
+                          : palette.bg
+                      } ${
+                        isSelected
+                          ? "ring-2 ring-offset-1 ring-electric z-10"
+                          : "hover:opacity-90"
+                      }`}
+                      style={{ top, height }}
+                    >
+                      <div className="flex items-center gap-1">
+                        <span
+                          className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${palette.badge}`}
+                          aria-hidden
+                        />
+                        <span className="truncate font-mono text-[10px] font-bold">
+                          {formatTimeShort(b.starts_at, timezone)}
+                        </span>
+                      </div>
+                      <p className="truncate text-[11px] font-semibold leading-tight">
+                        {isCancelled ? (
+                          <span className="line-through">Cancelled</span>
+                        ) : (
+                          `${b.attendees.length} going`
+                        )}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             );
           })}
