@@ -2,14 +2,12 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import AuthButton from "@/components/AuthButton";
 import StartRallyButton from "@/components/StartRallyButton";
 import FindGameButton from "@/components/FindGameButton";
 import Wordmark from "@/components/Wordmark";
 import WelcomePopup from "@/components/WelcomePopup";
-import CityTimeline from "@/components/matches/CityTimeline";
-import CourtLadder from "@/components/courts/CourtLadder";
+import { citySlug } from "@/lib/ladder";
 import type { CityNode } from "@/lib/types";
 
 const USMap = dynamic(() => import("@/components/USMap"), {
@@ -25,7 +23,14 @@ const USMap = dynamic(() => import("@/components/USMap"), {
 
 export default function HomePage() {
   const router = useRouter();
-  const [selectedCity, setSelectedCity] = useState<CityNode | null>(null);
+
+  // Map city click → /play/[state]/[city] (Find a Game flow).
+  // Replaces the previous in-page recent-rallies panel.
+  function handleCitySelect(city: CityNode | null) {
+    if (!city) return;
+    const stateLower = city.state.toLowerCase();
+    router.push(`/play/${stateLower}/${citySlug(city.city)}`);
+  }
 
   return (
     <main className="relative flex h-svh w-full flex-col overflow-hidden bg-black">
@@ -56,66 +61,11 @@ export default function HomePage() {
         />
       </div>
 
-      {/* The map — fills remaining height */}
+      {/* The map — fills remaining height. State + city clicks both
+          route into the Find a Game flow. */}
       <div className="relative min-h-0 flex-1">
-        <USMap onCitySelect={setSelectedCity} />
+        <USMap onCitySelect={handleCitySelect} />
       </div>
-
-      {/* City takeover — full-screen panel for the timeline + courts */}
-      {selectedCity && (
-        <div className="no-scrollbar absolute inset-0 z-40 overflow-y-auto bg-black">
-          <div className="mx-auto max-w-2xl p-5">
-            <button
-              type="button"
-              onClick={() => setSelectedCity(null)}
-              className="mb-4 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle"
-              aria-label="Back to map"
-            >
-              ◀ Back to map
-            </button>
-            <h2 className="font-display text-display-2xl font-extrabold text-bright">
-              {selectedCity.city}
-            </h2>
-            <p className="mt-1 text-base text-white/70">
-              {selectedCity.state} · {selectedCity.recentMatches} matches last
-              30 days
-            </p>
-
-            <div className="mt-8 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
-              Courts
-            </div>
-            <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-              {selectedCity.courts
-                .slice()
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((c) => (
-                  <li
-                    key={c.id}
-                    className="rounded-xl border-2 border-white/30 bg-black p-4 transition hover:border-pickle"
-                  >
-                    <div className="font-sans text-base font-medium text-white">
-                      {c.name}
-                    </div>
-                    <div className="mt-1 font-display text-display-xs uppercase font-semibold tracking-wide text-white/60">
-                      {c.type}
-                    </div>
-                    <CourtLadder courtId={c.id} />
-                  </li>
-                ))}
-            </ul>
-
-            <div className="mt-10 font-display text-display-xs uppercase font-semibold tracking-wide text-pickle">
-              Recent rallies
-            </div>
-            <div className="mt-3">
-              <CityTimeline
-                city={selectedCity.city}
-                state={selectedCity.state}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

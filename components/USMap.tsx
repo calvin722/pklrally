@@ -112,7 +112,7 @@ export default function USMap({ onCitySelect }: USMapProps) {
                   onClick={() => {
                     const code = stateCode(geo.properties.name ?? "");
                     if (code) {
-                      router.push(`/map/${code.toLowerCase()}`);
+                      router.push(`/play/${code.toLowerCase()}`);
                     }
                   }}
                   style={{

@@ -1,4 +1,5 @@
 import { createClient } from "./supabase/client";
+import { createGuest } from "./rally";
 
 export type BlockStatus = "open" | "cancelled";
 
@@ -131,6 +132,76 @@ export async function joinBlock(blockId: string, playerId: string) {
     .from("open_play_attendees")
     .insert({ block_id: blockId, player_id: playerId });
   if (error && !/duplicate/i.test(error.message)) throw new Error(error.message);
+}
+
+/**
+ * Add an existing player to a block as the inviter. Used when the inviter
+ * picks a known member from the typeahead.
+ */
+export async function inviteExistingPlayer(
+  blockId: string,
+  invitedPlayerId: string,
+  invitedByPlayerId: string,
+) {
+  const supabase = createClient();
+  const { error } = await supabase.from("open_play_attendees").insert({
+    block_id: blockId,
+    player_id: invitedPlayerId,
+    invited_by: invitedByPlayerId,
+  });
+  if (error && !/duplicate/i.test(error.message)) {
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * Invite a non-member by email or phone. Creates a guest player row
+ * (with an invite_token if phone is provided so the inviter can text a
+ * /c/<token> claim link), adds them as a block attendee, and returns
+ * data needed for follow-up email/SMS.
+ */
+export async function inviteNonMember(input: {
+  blockId: string;
+  invitedByPlayerId: string;
+  displayName: string;
+  email?: string;
+  phone?: string;
+}): Promise<{
+  playerId: string;
+  email: string | null;
+  phone: string | null;
+  claimUrl: string | null;
+}> {
+  const guest = await createGuest(
+    input.displayName,
+    input.email,
+    input.phone,
+  );
+
+  const supabase = createClient();
+  const { error } = await supabase.from("open_play_attendees").insert({
+    block_id: input.blockId,
+    player_id: guest.id,
+    invited_by: input.invitedByPlayerId,
+  });
+  if (error && !/duplicate/i.test(error.message)) {
+    throw new Error(error.message);
+  }
+
+  const siteUrl =
+    typeof window !== "undefined" && window.location.origin
+      ? window.location.origin
+      : "https://pklrally.com";
+  const claimUrl = guest.invite_token
+    ? `${siteUrl}/c/${guest.invite_token}`
+    : null;
+
+  return {
+    playerId: guest.id,
+    email: guest.email ?? input.email ?? null,
+    phone: guest.phone ?? input.phone ?? null,
+    claimUrl,
+  };
 }
 
 export async function leaveBlock(blockId: string, playerId: string) {

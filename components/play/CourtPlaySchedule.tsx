@@ -13,6 +13,7 @@ import {
   type BlockWithAttendees,
 } from "@/lib/play";
 import Avatar from "@/components/Avatar";
+import InviteToBlockSheet from "@/components/play/InviteToBlockSheet";
 
 interface Props {
   courtId: string;
@@ -34,6 +35,7 @@ export default function CourtPlaySchedule({
   const [creating, setCreating] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [invitingBlockId, setInvitingBlockId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -165,6 +167,7 @@ export default function CourtPlaySchedule({
                       onJoin={() => handleJoin(b.id)}
                       onLeave={() => handleLeave(b.id)}
                       onCancel={() => handleCancel(b.id)}
+                      onInvite={() => setInvitingBlockId(b.id)}
                       busy={busy === b.id}
                     />
                   ))}
@@ -204,6 +207,36 @@ export default function CourtPlaySchedule({
           }}
         />
       )}
+
+      {invitingBlockId &&
+        currentPlayerId &&
+        (() => {
+          const inviteBlock = blocks.find((b) => b.id === invitingBlockId);
+          if (!inviteBlock) return null;
+          const dayLabel = new Date(
+            inviteBlock.starts_at,
+          ).toLocaleDateString("en-US", {
+            weekday: "long",
+            month: "short",
+            day: "numeric",
+            timeZone: timezone,
+          });
+          return (
+            <InviteToBlockSheet
+              blockId={inviteBlock.id}
+              inviterPlayerId={currentPlayerId}
+              inviterName={currentPlayerName ?? "Friend"}
+              blockTimeRange={formatBlockTimeRange(inviteBlock, timezone)}
+              blockDayLabel={dayLabel}
+              courtName={courtName}
+              excludePlayerIds={inviteBlock.attendees.map(
+                (a) => a.player_id,
+              )}
+              onClose={() => setInvitingBlockId(null)}
+              onInvited={refresh}
+            />
+          );
+        })()}
     </div>
   );
 }
@@ -220,6 +253,7 @@ function BlockCard({
   onJoin,
   onLeave,
   onCancel,
+  onInvite,
   busy,
 }: {
   block: BlockWithAttendees;
@@ -230,6 +264,7 @@ function BlockCard({
   onJoin: () => void;
   onLeave: () => void;
   onCancel: () => void;
+  onInvite: () => void;
   busy: boolean;
 }) {
   const youAreIn = currentPlayerId
@@ -312,14 +347,25 @@ function BlockCard({
         </div>
       )}
 
-      {/* Toggle expand */}
-      <button
-        type="button"
-        onClick={onToggleExpand}
-        className="mt-3 font-display text-display-xs uppercase font-bold tracking-wide text-white/50 hover:text-electric"
-      >
-        {isExpanded ? "− Hide details" : "+ See all attendees"}
-      </button>
+      {/* Toggle expand + invite */}
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="font-display text-display-xs uppercase font-bold tracking-wide text-white/50 hover:text-electric"
+        >
+          {isExpanded ? "− Hide details" : "+ See all attendees"}
+        </button>
+        {currentPlayerId && (
+          <button
+            type="button"
+            onClick={onInvite}
+            className="font-display text-display-xs uppercase font-bold tracking-wide text-electric hover:text-bright"
+          >
+            ＋ Invite friends
+          </button>
+        )}
+      </div>
 
       {isExpanded && (
         <div className="mt-3 border-t border-white/10 pt-3">
