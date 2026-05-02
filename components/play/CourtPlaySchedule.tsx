@@ -149,14 +149,19 @@ export default function CourtPlaySchedule({
               timezone={timezone}
               selectedBlockId={expandedId}
               onSelectBlock={setExpandedId}
+              currentPlayerId={currentPlayerId}
+              onJoin={handleJoin}
+              onLeave={handleLeave}
+              busyBlockId={busy}
             />
 
-            {/* Expanded block details panel */}
+            {/* Expanded block details — modal overlay so it pops above
+                the calendar instead of getting lost below. */}
             {expandedId && (() => {
               const b = blocks.find((x) => x.id === expandedId);
               if (!b) return null;
               return (
-                <div className="mt-4">
+                <BlockDetailModal onClose={() => setExpandedId(null)}>
                   <BlockCard
                     block={b}
                     timezone={timezone}
@@ -169,7 +174,7 @@ export default function CourtPlaySchedule({
                     onInvite={() => setInvitingBlockId(b.id)}
                     busy={busy === b.id}
                   />
-                </div>
+                </BlockDetailModal>
               );
             })()}
           </>
@@ -220,6 +225,45 @@ export default function CourtPlaySchedule({
           );
         })()}
     </div>
+  );
+}
+
+// =============================================================
+// BlockDetailModal — pops above the calendar when a block is tapped
+// =============================================================
+function BlockDetailModal({
+  children,
+  onClose,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="fixed inset-x-0 bottom-0 z-50 max-h-[88vh] overflow-y-auto rounded-t-2xl border-t-2 border-x-2 border-electric bg-black p-4 shadow-2xl
+          sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:border-2 sm:p-5"
+      >
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white/30 font-mono text-base text-white/60 hover:border-electric hover:text-electric"
+          >
+            ×
+          </button>
+        </div>
+        {children}
+      </div>
+    </>
   );
 }
 

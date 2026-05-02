@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { BlockWithAttendees } from "@/lib/play";
+import Avatar from "@/components/Avatar";
 
 interface WeekCalendarProps {
   blocks: BlockWithAttendees[];
@@ -13,6 +14,12 @@ interface WeekCalendarProps {
   /** Currently expanded block id, or null */
   selectedBlockId: string | null;
   onSelectBlock: (id: string | null) => void;
+  /** For showing Join/Leave directly on the block */
+  currentPlayerId: string | null;
+  onJoin: (blockId: string) => void;
+  onLeave: (blockId: string) => void;
+  /** Block id currently in flight (join/leave busy) */
+  busyBlockId: string | null;
 }
 
 // Each hour gets this many pixels of vertical space
@@ -51,6 +58,10 @@ export default function WeekCalendar({
   endHour = 21,
   selectedBlockId,
   onSelectBlock,
+  currentPlayerId,
+  onJoin,
+  onLeave,
+  busyBlockId,
 }: WeekCalendarProps) {
   const [activeDayIdx, setActiveDayIdx] = useState(0);
 
@@ -189,13 +200,14 @@ export default function WeekCalendar({
                 } sm:block`}
                 style={{ height: totalHeight }}
               >
-                {/* Hour grid lines */}
+                {/* Hour grid lines — pointer-events-none so they don't
+                    swallow clicks meant for the blocks above them */}
                 {hours.map((h, i) => {
                   if (i === hours.length - 1) return null;
                   return (
                     <div
                       key={h}
-                      className="absolute left-0 right-0 border-b border-[#E4E4E7]"
+                      className="pointer-events-none absolute left-0 right-0 border-b border-[#E4E4E7]"
                       style={{
                         top: (h - effectiveStart) * HOUR_HEIGHT,
                         height: HOUR_HEIGHT,
@@ -209,48 +221,30 @@ export default function WeekCalendar({
                   const startH = hourFractionInTz(b.starts_at, timezone);
                   const endH = hourFractionInTz(b.ends_at, timezone);
                   const top = (startH - effectiveStart) * HOUR_HEIGHT;
+                  // Comfortable tap target — minimum 80px even if the
+                  // block is a 30-minute slot
                   const height = Math.max(
-                    32,
+                    80,
                     (endH - startH) * HOUR_HEIGHT,
                   );
-                  const palette = hashToPalette(b.id);
-                  const isCancelled = b.status === "cancelled";
-                  const isSelected = selectedBlockId === b.id;
                   return (
-                    <button
+                    <CalendarBlock
                       key={b.id}
-                      type="button"
-                      onClick={() =>
-                        onSelectBlock(isSelected ? null : b.id)
+                      block={b}
+                      timezone={timezone}
+                      top={top}
+                      height={height}
+                      isSelected={selectedBlockId === b.id}
+                      isBusy={busyBlockId === b.id}
+                      currentPlayerId={currentPlayerId}
+                      onSelect={() =>
+                        onSelectBlock(
+                          selectedBlockId === b.id ? null : b.id,
+                        )
                       }
-                      className={`absolute left-1 right-1 overflow-hidden rounded-md border-2 px-1.5 py-1 text-left text-[#18181B] transition ${palette.border} ${
-                        isCancelled
-                          ? "bg-[#E4E4E7] opacity-60"
-                          : palette.bg
-                      } ${
-                        isSelected
-                          ? "ring-2 ring-offset-1 ring-electric z-10"
-                          : "hover:opacity-90"
-                      }`}
-                      style={{ top, height }}
-                    >
-                      <div className="flex items-center gap-1">
-                        <span
-                          className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${palette.badge}`}
-                          aria-hidden
-                        />
-                        <span className="truncate font-mono text-[10px] font-bold">
-                          {formatTimeShort(b.starts_at, timezone)}
-                        </span>
-                      </div>
-                      <p className="truncate text-[11px] font-semibold leading-tight">
-                        {isCancelled ? (
-                          <span className="line-through">Cancelled</span>
-                        ) : (
-                          `${b.attendees.length} going`
-                        )}
-                      </p>
-                    </button>
+                      onJoin={() => onJoin(b.id)}
+                      onLeave={() => onLeave(b.id)}
+                    />
                   );
                 })}
               </div>
@@ -258,6 +252,125 @@ export default function WeekCalendar({
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+// =============================================================
+// CalendarBlock — one positioned block inside a day column
+// =============================================================
+function CalendarBlock({
+  block,
+  timezone,
+  top,
+  height,
+  isSelected,
+  isBusy,
+  currentPlayerId,
+  onSelect,
+  onJoin,
+  onLeave,
+}: {
+  block: BlockWithAttendees;
+  timezone: string;
+  top: number;
+  height: number;
+  isSelected: boolean;
+  isBusy: boolean;
+  currentPlayerId: string | null;
+  onSelect: () => void;
+  onJoin: () => void;
+  onLeave: () => void;
+}) {
+  const palette = hashToPalette(block.id);
+  const isCancelled = block.status === "cancelled";
+  const youAreIn = currentPlayerId
+    ? block.attendees.some((a) => a.player_id === currentPlayerId)
+    : false;
+
+  // Show up to 4 mini avatars, +N for overflow
+  const previewCount = 4;
+  const preview = block.attendees.slice(0, previewCount);
+  const overflow = block.attendees.length - previewCount;
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      className={`absolute left-1 right-1 cursor-pointer overflow-hidden rounded-md border-2 px-2 py-1.5 text-[#18181B] transition ${palette.border} ${
+        isCancelled ? "bg-[#E4E4E7] opacity-60" : palette.bg
+      } ${
+        isSelected
+          ? "ring-2 ring-offset-1 ring-electric z-10"
+          : "hover:opacity-95 hover:shadow-md"
+      }`}
+      style={{ top, height }}
+    >
+      {/* Time + count row */}
+      <div className="flex items-center justify-between gap-1">
+        <span className="truncate font-mono text-[10px] font-bold">
+          {formatTimeShort(block.starts_at, timezone)}
+        </span>
+        <span className="font-mono text-[10px] font-bold">
+          {isCancelled ? "—" : `${block.attendees.length}`}
+        </span>
+      </div>
+
+      {/* Avatars row */}
+      {!isCancelled && preview.length > 0 && (
+        <div className="mt-1 flex flex-wrap items-center gap-0.5">
+          {preview.map((a) => (
+            <Avatar
+              key={a.player_id}
+              player={{
+                display_name: a.display_name,
+                avatar_url: a.avatar_url,
+                avatar_focal_x: a.avatar_focal_x,
+                avatar_focal_y: a.avatar_focal_y,
+                is_guest: a.is_guest,
+              }}
+              size="xs"
+            />
+          ))}
+          {overflow > 0 && (
+            <span className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#3F3F46] bg-white font-mono text-[9px] font-bold text-[#18181B]">
+              +{overflow}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Action button — Join / Leave */}
+      {currentPlayerId && !isCancelled && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            youAreIn ? onLeave() : onJoin();
+          }}
+          disabled={isBusy}
+          className={`mt-1 w-full rounded px-2 py-1 font-display text-[10px] font-bold uppercase tracking-wider transition disabled:opacity-50 ${
+            youAreIn
+              ? "border-2 border-[#3F3F46] bg-white text-[#18181B] hover:bg-[#F4F4F5]"
+              : "bg-electric text-black hover:opacity-90"
+          }`}
+        >
+          {isBusy ? "…" : youAreIn ? "Leave" : "+ Join"}
+        </button>
+      )}
+
+      {isCancelled && (
+        <p className="mt-1 truncate text-[11px] font-semibold line-through">
+          Cancelled
+        </p>
+      )}
     </div>
   );
 }
