@@ -111,10 +111,10 @@ export default function InviteToBlockSheet({
     setErr(null);
     try {
       await inviteExistingPlayer(blockId, p.id, inviterPlayerId);
-      // Fire email invite if they have an email and aren't a member
-      // (members will see the block in their app; non-member-but-existing-
-      // guest rows still get an email if we have one).
-      if (p.email && p.is_guest) {
+      // Fire email notification for ANY recipient with an email — both
+      // members (who otherwise have no signal they were invited) and
+      // existing guests with email.
+      if (p.email) {
         await fireBlockEmailInvite(p.id);
       }
       setJustInvited((prev) => [

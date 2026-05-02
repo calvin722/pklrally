@@ -61,8 +61,8 @@ export async function POST(request: Request) {
   const { data: block, error: blockErr } = await supabase
     .from("open_play_blocks")
     .select(
-      `id, starts_at, ends_at, notes,
-       court:courts (name, address, city, state, timezone)`,
+      `id, court_id, starts_at, ends_at, notes,
+       court:courts (id, name, address, city, state, timezone)`,
     )
     .eq("id", blockId)
     .maybeSingle();
@@ -72,15 +72,16 @@ export async function POST(request: Request) {
 
   const { data: guest } = await supabase
     .from("players")
-    .select("id, display_name, email, invite_token")
+    .select("id, display_name, email, invite_token, auth_user_id, is_guest")
     .eq("id", guestPlayerId)
     .maybeSingle();
   if (!guest || !guest.email) {
     return NextResponse.json(
-      { error: "Guest has no email" },
+      { error: "Recipient has no email" },
       { status: 400 },
     );
   }
+  const recipientIsMember = !!guest.auth_user_id && !guest.is_guest;
 
   // Confirm caller invited the guest (or is admin) — defense in depth
   const { data: attendee } = await supabase
@@ -125,9 +126,18 @@ export async function POST(request: Request) {
     : "your local court";
   const courtAddress = court?.address ? `<br>${escapeHtml(court.address)}` : "";
 
-  const link = guest.invite_token
-    ? `${SITE_URL}/c/${guest.invite_token}`
-    : `${SITE_URL}/play`;
+  // Deep link:
+  //   - members: straight to the court's play schedule (they're signed in)
+  //   - guests with token: claim URL
+  //   - guests without token: generic /play
+  const courtPathSlug = court
+    ? `/play/${String(court.state).toLowerCase()}/${slugify(String(court.city))}/${court.id}`
+    : "/play";
+  const link = recipientIsMember
+    ? `${SITE_URL}${courtPathSlug}`
+    : guest.invite_token
+      ? `${SITE_URL}/c/${guest.invite_token}`
+      : `${SITE_URL}/play`;
 
   const subject = `${callerPlayer.display_name} invited you to open play on ${new Date(block.starts_at).toLocaleDateString("en-US", { weekday: "long", timeZone: tz })}`;
 
@@ -153,14 +163,21 @@ export async function POST(request: Request) {
     ${block.notes ? `<p style="font-size:14px;line-height:1.5;margin:0 0 16px;color:rgba(255,255,255,0.7);"><strong>Notes:</strong> ${escapeHtml(block.notes)}</p>` : ""}
 
     <p style="margin:24px 0;text-align:center;">
-      <a href="${link}" style="display:inline-block;background:#00BFFF;color:#000;text-decoration:none;padding:14px 28px;border-radius:12px;font-family:Manrope,system-ui,sans-serif;font-weight:800;font-size:16px;text-transform:uppercase;letter-spacing:0.04em;">Confirm I&rsquo;m in →</a>
+      <a href="${link}" style="display:inline-block;background:#00BFFF;color:#000;text-decoration:none;padding:14px 28px;border-radius:12px;font-family:Manrope,system-ui,sans-serif;font-weight:800;font-size:16px;text-transform:uppercase;letter-spacing:0.04em;">${recipientIsMember ? "View the session →" : "Confirm I&rsquo;m in →"}</a>
     </p>
 
-    <p style="font-size:14px;color:rgba(255,255,255,0.6);line-height:1.5;margin-top:24px;">
+    ${
+      recipientIsMember
+        ? `<p style="font-size:14px;color:rgba(255,255,255,0.6);line-height:1.5;margin-top:24px;">
+      You&rsquo;re already on the attendee list. Tap above to see who else
+      is going, message in the notes, or leave the session if plans change.
+    </p>`
+        : `<p style="font-size:14px;color:rgba(255,255,255,0.6);line-height:1.5;margin-top:24px;">
       PKLRALLY is the social map of pickleball — find games, log matches,
       compete for monthly prizes. When you sign up using this email, this
       session and any matches played there count toward your stats.
-    </p>
+    </p>`
+    }
 
     <p style="font-size:12px;color:rgba(255,255,255,0.4);line-height:1.5;margin-top:32px;border-top:1px solid rgba(255,255,255,0.1);padding-top:16px;">
       Not interested? Just ignore this email. Nothing happens to your data
@@ -201,4 +218,12 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function slugify(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }
