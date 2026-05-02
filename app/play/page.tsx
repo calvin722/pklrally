@@ -12,7 +12,7 @@ interface StateRow {
 }
 
 /**
- * Find a Game — top-level state picker. Lists every state with active
+ * Find Open Play — top-level state picker. Lists every state with active
  * courts, plus a count of upcoming open-play blocks (next 7 days).
  */
 export default async function FindGamePage() {
@@ -72,7 +72,7 @@ export default async function FindGamePage() {
 
         <header className="mt-8">
           <p className="font-display text-display-xs uppercase font-bold tracking-widest text-electric">
-            Find a Game
+            Find Open Play
           </p>
           <h1 className="mt-1 font-display text-display-3xl font-extrabold uppercase tracking-tight text-bright sm:text-display-4xl">
             Pick your state

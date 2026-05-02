@@ -12,7 +12,7 @@ interface PageProps {
 }
 
 /**
- * Find a Game — court picker for one city. Each court shows the next-7-day
+ * Find Open Play — court picker for one city. Each court shows the next-7-day
  * count of open-play blocks so you can quickly see where the action is.
  */
 export default async function FindGameCityPage({ params }: PageProps) {
@@ -68,7 +68,7 @@ export default async function FindGameCityPage({ params }: PageProps) {
         <header className="mt-8">
           <p className="font-display text-display-xs uppercase font-bold tracking-widest text-electric">
             <Link href="/play" className="hover:text-bright">
-              Find a Game
+              Find Open Play
             </Link>{" "}
             ›{" "}
             <Link href={`/play/${code.toLowerCase()}`} className="hover:text-bright">

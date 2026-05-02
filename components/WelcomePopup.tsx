@@ -77,18 +77,18 @@ export default function WelcomePopup() {
         <ol className="mt-5 space-y-3">
           <Step
             n="1"
-            title="Play your matches"
-            body="At your local courts. Doubles, with anyone, on your own pace."
+            title="Find open play in your area"
+            body="Browse open-play sessions at courts near you, wherever you are. Join with one tap, or create your own and invite friends."
           />
           <Step
             n="2"
-            title="Record your games"
-            body="Log them on PKLRALLY after each rally. Your opponent vouches the score and it counts."
+            title="Show up &amp; play"
+            body="Doubles, with anyone, on your own pace. Bring a paddle — that&apos;s it."
           />
           <Step
             n="3"
-            title="Win prizes monthly"
-            body="The top three on your city's ladder at the end of each month win sponsor prizes. Free for players."
+            title="Track to win"
+            body="Log the matches you play to climb your city&apos;s monthly ladder. Top 3 win sponsor prizes. Always free for players."
           />
         </ol>
 

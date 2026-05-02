@@ -18,7 +18,7 @@ interface CityRow {
 }
 
 /**
- * Find a Game — city picker for one state.
+ * Find Open Play — city picker for one state.
  */
 export default async function FindGameStatePage({ params }: PageProps) {
   const { state } = await params;
@@ -78,7 +78,7 @@ export default async function FindGameStatePage({ params }: PageProps) {
         <header className="mt-8">
           <p className="font-display text-display-xs uppercase font-bold tracking-widest text-electric">
             <Link href="/play" className="hover:text-bright">
-              Find a Game
+              Find Open Play
             </Link>{" "}
             ›
           </p>
