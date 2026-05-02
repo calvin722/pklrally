@@ -8,6 +8,7 @@ import {
   joinBlock,
   leaveBlock,
   cancelBlock,
+  deleteBlockHard,
   createBlock,
   formatBlockTimeRange,
   type BlockWithAttendees,
@@ -90,14 +91,22 @@ export default function CourtPlaySchedule({
   }
 
   async function handleCancel(blockId: string) {
-    if (!confirm("Cancel this open play block? Attendees will see it as cancelled.")) return;
+    if (
+      !confirm(
+        "Delete this open play block? Anyone who joined will see it removed from their calendar.",
+      )
+    )
+      return;
     setBusy(blockId);
     try {
-      await cancelBlock(blockId);
-      await refresh();
+      await deleteBlockHard(blockId);
+      // Block is gone; collapse the modal in case it was open
+      setExpandedId(null);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to cancel");
+      console.error("[handleCancel] failed:", e);
+      alert(e instanceof Error ? e.message : "Failed to delete");
     } finally {
+      await refresh();
       setBusy(null);
     }
   }
@@ -437,10 +446,13 @@ function BlockCard({
                 type="button"
                 onClick={onCancel}
                 disabled={busy}
-                className="rounded-md border border-bright px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wide text-bright hover:bg-bright hover:text-black disabled:opacity-50"
+                className="rounded-md border-2 border-bright px-3 py-1 font-display text-[11px] font-extrabold uppercase tracking-wide text-bright hover:bg-bright hover:text-black disabled:opacity-50"
               >
-                Cancel block
+                Delete block
               </button>
+              <p className="mt-1 text-[10px] text-white/40">
+                Removes the block + all attendees. This can&apos;t be undone.
+              </p>
             </div>
           )}
         </div>

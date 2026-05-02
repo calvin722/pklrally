@@ -242,6 +242,19 @@ export async function cancelBlock(blockId: string) {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Permanently removes a block + all its attendee rows (FK cascade).
+ * Only the creator (or an admin) can call this — RLS enforces it.
+ */
+export async function deleteBlockHard(blockId: string) {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("open_play_blocks")
+    .delete()
+    .eq("id", blockId);
+  if (error) throw new Error(error.message);
+}
+
 // -----------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------
