@@ -1,16 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { BlockWithAttendees } from "@/lib/play";
 import Avatar from "@/components/Avatar";
 
 interface WeekCalendarProps {
   blocks: BlockWithAttendees[];
   timezone: string;
-  /** Hour the calendar starts displaying (default 8 = 8 AM) */
-  startHour?: number;
-  /** Hour the calendar ends displaying (default 21 = 9 PM) */
-  endHour?: number;
+  /** Default visible start hour (the window auto-scrolls here on load).
+   *  Full 24-hour grid is always rendered; this just sets the initial view. */
+  visibleStartHour?: number;
+  /** Default visible end hour. */
+  visibleEndHour?: number;
   /** Currently expanded block id, or null */
   selectedBlockId: string | null;
   onSelectBlock: (id: string | null) => void;
@@ -54,8 +55,8 @@ function hashToPalette(id: string): (typeof BLOCK_PALETTE)[number] {
 export default function WeekCalendar({
   blocks,
   timezone,
-  startHour = 8,
-  endHour = 21,
+  visibleStartHour = 7,
+  visibleEndHour = 21,
   selectedBlockId,
   onSelectBlock,
   currentPlayerId,
@@ -64,10 +65,9 @@ export default function WeekCalendar({
   busyBlockId,
 }: WeekCalendarProps) {
   const [activeDayIdx, setActiveDayIdx] = useState(0);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // Build the 7-day window starting at "today" in the court's timezone.
-  // Day labels + iso keys are computed in the court's TZ so blocks land in
-  // the right column regardless of viewer location.
   const days = useMemo(() => buildWeekDays(timezone), [timezone]);
 
   // Index blocks by day key for column rendering
@@ -83,26 +83,24 @@ export default function WeekCalendar({
     return map;
   }, [blocks, timezone]);
 
-  // Auto-extend display range if any block falls outside default 8-10 PM
-  const { effectiveStart, effectiveEnd } = useMemo(() => {
-    let lo = startHour;
-    let hi = endHour;
-    for (const b of blocks) {
-      const startH = hourFractionInTz(b.starts_at, timezone);
-      const endH = hourFractionInTz(b.ends_at, timezone);
-      if (startH < lo) lo = Math.floor(startH);
-      if (endH > hi) hi = Math.ceil(endH);
-    }
-    return { effectiveStart: Math.max(0, lo), effectiveEnd: Math.min(24, hi) };
-  }, [blocks, startHour, endHour, timezone]);
-
+  // Full 24-hour grid is always rendered. Block positions are computed
+  // from absolute hour 0 (midnight) so the math is straightforward.
+  const TOTAL_HOURS = 24;
   const hours = useMemo(() => {
     const out: number[] = [];
-    for (let h = effectiveStart; h <= effectiveEnd; h++) out.push(h);
+    for (let h = 0; h <= TOTAL_HOURS; h++) out.push(h);
     return out;
-  }, [effectiveStart, effectiveEnd]);
+  }, []);
 
-  const totalHeight = (effectiveEnd - effectiveStart) * HOUR_HEIGHT;
+  const totalHeight = TOTAL_HOURS * HOUR_HEIGHT;
+  const visibleHeight = (visibleEndHour - visibleStartHour) * HOUR_HEIGHT;
+
+  // Scroll to the default visible window (7 AM by default) on mount
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = visibleStartHour * HOUR_HEIGHT;
+    }
+  }, [visibleStartHour]);
 
   return (
     <div>
@@ -137,7 +135,8 @@ export default function WeekCalendar({
       </div>
 
       <div className="overflow-hidden rounded-2xl border-2 border-[#D4D4D8] bg-[#F4F4F5] shadow-2xl">
-        {/* Day-of-week header row (desktop only) */}
+        {/* Day-of-week header row (desktop only) — sticks above the
+            scrollable grid */}
         <div className="hidden border-b-2 border-[#D4D4D8] bg-[#FAFAFA] sm:grid sm:grid-cols-[60px_repeat(7,1fr)]">
           <div />
           {days.map((d, i) => {
@@ -162,7 +161,14 @@ export default function WeekCalendar({
           })}
         </div>
 
-        {/* Time grid */}
+        {/* Scrollable time grid — full 24h rendered, default viewport
+            shows visibleStart..visibleEnd, user can scroll to see early
+            morning or late night. */}
+        <div
+          ref={scrollRef}
+          className="overflow-y-auto"
+          style={{ maxHeight: visibleHeight }}
+        >
         <div className="grid grid-cols-[60px_1fr] sm:grid-cols-[60px_repeat(7,1fr)]">
           {/* Hours column */}
           <div
@@ -176,7 +182,7 @@ export default function WeekCalendar({
                   key={h}
                   className="absolute left-0 right-0 border-b border-[#E4E4E7] px-2"
                   style={{
-                    top: (h - effectiveStart) * HOUR_HEIGHT,
+                    top: h * HOUR_HEIGHT,
                     height: HOUR_HEIGHT,
                   }}
                 >
@@ -209,7 +215,7 @@ export default function WeekCalendar({
                       key={h}
                       className="pointer-events-none absolute left-0 right-0 border-b border-[#E4E4E7]"
                       style={{
-                        top: (h - effectiveStart) * HOUR_HEIGHT,
+                        top: h * HOUR_HEIGHT,
                         height: HOUR_HEIGHT,
                       }}
                     />
@@ -220,7 +226,7 @@ export default function WeekCalendar({
                 {dayBlocks.map((b) => {
                   const startH = hourFractionInTz(b.starts_at, timezone);
                   const endH = hourFractionInTz(b.ends_at, timezone);
-                  const top = (startH - effectiveStart) * HOUR_HEIGHT;
+                  const top = startH * HOUR_HEIGHT;
                   // Comfortable tap target — minimum 80px even if the
                   // block is a 30-minute slot
                   const height = Math.max(
@@ -250,6 +256,7 @@ export default function WeekCalendar({
               </div>
             );
           })}
+        </div>
         </div>
       </div>
     </div>
@@ -347,23 +354,33 @@ function CalendarBlock({
         </div>
       )}
 
-      {/* Action button — Join / Leave */}
+      {/* Action button — Join / Leave. Wrapped in a small layer that
+          stops both onClick AND onMouseDown from bubbling so the parent
+          block's tap handler doesn't open the modal at the same time. */}
       {currentPlayerId && !isCancelled && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            youAreIn ? onLeave() : onJoin();
-          }}
-          disabled={isBusy}
-          className={`mt-1 w-full rounded px-2 py-1 font-display text-[10px] font-bold uppercase tracking-wider transition disabled:opacity-50 ${
-            youAreIn
-              ? "border-2 border-[#3F3F46] bg-white text-[#18181B] hover:bg-[#F4F4F5]"
-              : "bg-electric text-black hover:opacity-90"
-          }`}
+        <div
+          className="mt-1.5"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
         >
-          {isBusy ? "…" : youAreIn ? "Leave" : "+ Join"}
-        </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (youAreIn) onLeave();
+              else onJoin();
+            }}
+            disabled={isBusy}
+            className={`w-full rounded-md px-2 py-1.5 font-display text-[11px] font-extrabold uppercase tracking-wider transition disabled:opacity-50 ${
+              youAreIn
+                ? "border-2 border-[#3F3F46] bg-white text-[#18181B] hover:bg-[#F4F4F5]"
+                : "bg-electric text-black shadow-sm hover:opacity-90"
+            }`}
+          >
+            {isBusy ? "Saving…" : youAreIn ? "Leave" : "+ Join"}
+          </button>
+        </div>
       )}
 
       {isCancelled && (

@@ -123,6 +123,20 @@ export async function createBlock(input: {
     .select("id")
     .single();
   if (error) throw new Error(error.message);
+
+  // Defense in depth: explicitly add the creator as the first attendee.
+  // Migration 0027's trigger should already do this server-side, but if
+  // the trigger isn't installed (older databases) we want the creator to
+  // appear in the attendee list immediately. Duplicate insert is safely
+  // ignored on the client.
+  try {
+    await supabase
+      .from("open_play_attendees")
+      .insert({ block_id: data.id, player_id: input.createdBy });
+  } catch {
+    /* trigger already inserted — ignore duplicate-key error */
+  }
+
   return data;
 }
 
