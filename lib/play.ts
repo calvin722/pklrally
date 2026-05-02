@@ -1,0 +1,216 @@
+import { createClient } from "./supabase/client";
+
+export type BlockStatus = "open" | "cancelled";
+
+export interface OpenPlayBlock {
+  id: string;
+  court_id: string;
+  created_by: string;
+  starts_at: string;
+  ends_at: string;
+  notes: string | null;
+  status: BlockStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BlockAttendee {
+  player_id: string;
+  joined_at: string;
+  display_name: string;
+  username: string | null;
+  avatar_url: string | null;
+  avatar_focal_x: number | null;
+  avatar_focal_y: number | null;
+  is_guest: boolean;
+}
+
+export interface BlockWithAttendees extends OpenPlayBlock {
+  attendees: BlockAttendee[];
+}
+
+/**
+ * Pull every open-play block at a court within the next 7 days. Includes
+ * already-started blocks for "today" so players can still see + join an
+ * in-progress session.
+ */
+export async function fetchCourtBlocks(courtId: string): Promise<BlockWithAttendees[]> {
+  const supabase = createClient();
+  const startWindow = startOfTodayUtc();
+  const endWindow = new Date(startWindow.getTime() + 8 * 24 * 60 * 60 * 1000);
+
+  const { data: blocks, error } = await supabase
+    .from("open_play_blocks")
+    .select(
+      "id, court_id, created_by, starts_at, ends_at, notes, status, created_at, updated_at",
+    )
+    .eq("court_id", courtId)
+    .gte("starts_at", startWindow.toISOString())
+    .lt("starts_at", endWindow.toISOString())
+    .order("starts_at", { ascending: true });
+
+  if (error || !blocks) {
+    if (error) console.error("fetchCourtBlocks failed:", error);
+    return [];
+  }
+
+  if (blocks.length === 0) return [];
+
+  // Pull every attendee for these blocks
+  const blockIds = blocks.map((b) => b.id);
+  const { data: attendeeRows } = await supabase
+    .from("open_play_attendees")
+    .select(
+      `block_id, player_id, joined_at,
+       player:players (
+         id, display_name, username, avatar_url,
+         avatar_focal_x, avatar_focal_y, is_guest
+       )`,
+    )
+    .in("block_id", blockIds)
+    .order("joined_at", { ascending: true });
+
+  const attendeesByBlock = new Map<string, BlockAttendee[]>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const j = (v: any) => (Array.isArray(v) ? v[0] : v);
+  for (const row of (attendeeRows ?? []) as Array<{
+    block_id: string;
+    player_id: string;
+    joined_at: string;
+    player: unknown;
+  }>) {
+    const player = j(row.player);
+    if (!player) continue;
+    if (!attendeesByBlock.has(row.block_id)) {
+      attendeesByBlock.set(row.block_id, []);
+    }
+    attendeesByBlock.get(row.block_id)!.push({
+      player_id: row.player_id,
+      joined_at: row.joined_at,
+      display_name: player.display_name,
+      username: player.username,
+      avatar_url: player.avatar_url,
+      avatar_focal_x: player.avatar_focal_x,
+      avatar_focal_y: player.avatar_focal_y,
+      is_guest: player.is_guest,
+    });
+  }
+
+  return blocks.map((b) => ({
+    ...b,
+    attendees: attendeesByBlock.get(b.id) ?? [],
+  })) as BlockWithAttendees[];
+}
+
+export async function createBlock(input: {
+  courtId: string;
+  createdBy: string;
+  startsAt: Date;
+  endsAt: Date;
+  notes?: string | null;
+}) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("open_play_blocks")
+    .insert({
+      court_id: input.courtId,
+      created_by: input.createdBy,
+      starts_at: input.startsAt.toISOString(),
+      ends_at: input.endsAt.toISOString(),
+      notes: input.notes?.trim() || null,
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function joinBlock(blockId: string, playerId: string) {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("open_play_attendees")
+    .insert({ block_id: blockId, player_id: playerId });
+  if (error && !/duplicate/i.test(error.message)) throw new Error(error.message);
+}
+
+export async function leaveBlock(blockId: string, playerId: string) {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("open_play_attendees")
+    .delete()
+    .eq("block_id", blockId)
+    .eq("player_id", playerId);
+  if (error) throw new Error(error.message);
+}
+
+export async function cancelBlock(blockId: string) {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("open_play_blocks")
+    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+    .eq("id", blockId);
+  if (error) throw new Error(error.message);
+}
+
+// -----------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------
+function startOfTodayUtc(): Date {
+  const d = new Date();
+  // Roll back 12 hours so all timezones see "today" — fine because we
+  // filter to the next 7 days from this anchor and timezone-display in
+  // each block card.
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+/**
+ * Group blocks by their day in the COURT's timezone. Returns an array
+ * of { dateLabel, isoDate, blocks } for stable rendering.
+ */
+export function groupBlocksByDay(
+  blocks: BlockWithAttendees[],
+  timezone: string,
+): Array<{ key: string; label: string; subLabel: string; blocks: BlockWithAttendees[] }> {
+  const groups = new Map<string, BlockWithAttendees[]>();
+  for (const b of blocks) {
+    const dt = new Date(b.starts_at);
+    // Date key in the court's timezone, e.g. "2026-05-01"
+    const key = dt.toLocaleDateString("en-CA", { timeZone: timezone });
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(b);
+  }
+
+  return Array.from(groups.entries()).map(([key, blocks]) => {
+    const sample = new Date(blocks[0].starts_at);
+    const label = sample.toLocaleDateString("en-US", {
+      weekday: "long",
+      timeZone: timezone,
+    });
+    const subLabel = sample.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: timezone,
+    });
+    return { key, label, subLabel, blocks };
+  });
+}
+
+export function formatBlockTimeRange(
+  block: OpenPlayBlock,
+  timezone: string,
+): string {
+  const start = new Date(block.starts_at);
+  const end = new Date(block.ends_at);
+  const startStr = start.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: timezone,
+  });
+  const endStr = end.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: timezone,
+    timeZoneName: "short",
+  });
+  return `${startStr} – ${endStr}`;
+}

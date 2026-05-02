@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import AuthButton from "@/components/AuthButton";
 import StartRallyButton from "@/components/StartRallyButton";
+import FindGameButton from "@/components/FindGameButton";
 import Wordmark from "@/components/Wordmark";
 import WelcomePopup from "@/components/WelcomePopup";
 import CityTimeline from "@/components/matches/CityTimeline";
@@ -43,10 +44,14 @@ export default function HomePage() {
         </nav>
       </header>
 
-      {/* Start Rally — sits above the map, centered chunky banner */}
-      <div className="z-20 flex justify-center px-4 py-4">
+      {/* CTAs — Find a Game (electric) + Start Rally (pickle) above the map */}
+      <div className="z-20 flex justify-center gap-3 px-4 py-4">
+        <FindGameButton
+          className="flex-1 max-w-xs"
+          onClick={() => router.push("/play")}
+        />
         <StartRallyButton
-          className="w-full max-w-md"
+          className="flex-1 max-w-xs"
           onClick={() => router.push("/rally/new")}
         />
       </div>
