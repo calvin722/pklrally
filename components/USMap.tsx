@@ -215,7 +215,10 @@ export default function USMap({ onCitySelect }: USMapProps) {
                   />
                 </g>
 
-                {(city.buzzing || isHovered || selectedState) && (
+                {/* Only show city labels when zoomed into a state, or on
+                    hover. On the national map the dot alone is enough —
+                    a buzzing city still pulses via buzzClass on <circle>. */}
+                {(selectedState || isHovered) && (
                   <text
                     x={r + labelGap}
                     y={fontSize / 3}
@@ -230,7 +233,7 @@ export default function USMap({ onCitySelect }: USMapProps) {
                       strokeWidth: labelStrokeWidth,
                       strokeLinejoin: "round",
                       pointerEvents: "none",
-                      opacity: city.buzzing || isHovered ? 1 : 0.85,
+                      opacity: isHovered ? 1 : 0.85,
                     }}
                   >
                     {city.city}
