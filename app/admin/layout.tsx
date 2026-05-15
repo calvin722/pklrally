@@ -33,6 +33,7 @@ export default async function AdminLayout({
           <NavLink href="/admin/matches">Matches</NavLink>
           <NavLink href="/admin/invites">Invites</NavLink>
           <NavLink href="/admin/blocks">Open Play</NavLink>
+          <NavLink href="/leagues">Leagues</NavLink>
           <NavLink href="/admin/sponsorships">Sponsorships</NavLink>
         </nav>
 
