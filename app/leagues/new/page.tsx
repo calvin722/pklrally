@@ -24,7 +24,7 @@ export default async function NewLeaguePage() {
         </h1>
         <p className="mt-2 text-base text-white/60">
           You&rsquo;ll be the league admin — you run the rounds, enter scores,
-          and advance the night.
+          and advance the league.
         </p>
 
         <CreateLeagueForm playerId={player.id} />

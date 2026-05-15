@@ -1,7 +1,7 @@
 /**
  * Ladder leagues — King of the Court format.
  *
- * One league = one league night. The creator (admin) sets up the league,
+ * One league = one event. The creator (admin) sets up the league,
  * adds players, then advances round-by-round until the configured count
  * is hit. Logic lives in TypeScript on the client; RLS in migration 0030
  * enforces that only the creator (or a site admin) can mutate the league.
@@ -109,6 +109,25 @@ export interface LeagueState {
   rounds: LeagueRound[];
   matches: LeagueMatch[];
   standings: Standing[];
+}
+
+export type RoundResult = "win" | "loss" | "bye" | "pending";
+
+export interface PerRoundPoint {
+  round: number;
+  points: number;
+  result: RoundResult;
+}
+
+export interface PlayerRoundPoints {
+  player_id: string;
+  display_name: string;
+  username: string | null;
+  avatar_url: string | null;
+  avatar_focal_x: number | null;
+  avatar_focal_y: number | null;
+  total_points: number;
+  per_round: PerRoundPoint[];
 }
 
 // =====================================================================
@@ -629,7 +648,7 @@ export async function advanceRound(leagueId: string): Promise<void> {
     .eq("id", leagueId);
 }
 
-/** End the league night now (manual override before all rounds complete). */
+/** End the league now (manual override before all rounds complete). */
 export async function finalizeLeague(leagueId: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase
@@ -702,6 +721,80 @@ export function computeStandings(
   // Standings sorted by points desc, then wins desc as tiebreak
   const out = Array.from(stat.values());
   out.sort((a, b) => b.total_points - a.total_points || b.wins - a.wins);
+  return out;
+}
+
+/**
+ * For each player, build a per-round score timeline. Used by the stats
+ * graph page. Byes contribute 0 points with result="bye"; rounds that
+ * haven't been played yet get result="pending".
+ */
+export function computePlayerRoundPoints(
+  league: League,
+  players: LeaguePlayer[],
+  rounds: LeagueRound[],
+  matches: LeagueMatch[],
+): PlayerRoundPoints[] {
+  const bonus = league.win_bonus;
+  // Quick lookups: round_id -> round_number, and a per-player per-round result
+  const roundNumberById = new Map(rounds.map((r) => [r.id, r.round_number]));
+  const byeSetByRound = new Map(
+    rounds.map((r) => [r.round_number, new Set(r.byes)] as const),
+  );
+
+  const out: PlayerRoundPoints[] = players.map((p) => ({
+    player_id: p.player_id,
+    display_name: p.display_name,
+    username: p.username,
+    avatar_url: p.avatar_url,
+    avatar_focal_x: p.avatar_focal_x,
+    avatar_focal_y: p.avatar_focal_y,
+    total_points: 0,
+    per_round: Array.from({ length: league.n_rounds }, (_, i) => ({
+      round: i + 1,
+      points: 0,
+      result: "pending" as RoundResult,
+    })),
+  }));
+  const byId = new Map(out.map((p) => [p.player_id, p] as const));
+
+  // Mark byes first
+  for (const [roundNum, byeSet] of byeSetByRound.entries()) {
+    for (const pid of byeSet) {
+      const p = byId.get(pid);
+      if (!p) continue;
+      const slot = p.per_round[roundNum - 1];
+      if (slot) slot.result = "bye";
+    }
+  }
+
+  // Apply scored matches
+  for (const m of matches) {
+    if (m.team_a_score === null || m.team_b_score === null) continue;
+    const rNum = roundNumberById.get(m.round_id);
+    if (!rNum) continue;
+    const aWon = m.winner === "a";
+    const winners = aWon ? [m.team_a_p1, m.team_a_p2] : [m.team_b_p1, m.team_b_p2];
+    const losers = aWon ? [m.team_b_p1, m.team_b_p2] : [m.team_a_p1, m.team_a_p2];
+    const winScore = aWon ? m.team_a_score : m.team_b_score;
+    const loseScore = aWon ? m.team_b_score : m.team_a_score;
+
+    for (const pid of winners) {
+      const p = byId.get(pid);
+      if (!p) continue;
+      const pts = winScore + bonus;
+      p.per_round[rNum - 1] = { round: rNum, points: pts, result: "win" };
+      p.total_points += pts;
+    }
+    for (const pid of losers) {
+      const p = byId.get(pid);
+      if (!p) continue;
+      p.per_round[rNum - 1] = { round: rNum, points: loseScore, result: "loss" };
+      p.total_points += loseScore;
+    }
+  }
+
+  out.sort((a, b) => b.total_points - a.total_points);
   return out;
 }
 

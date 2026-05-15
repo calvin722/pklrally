@@ -67,7 +67,7 @@ export default function CreateLeagueForm({ playerId }: Props) {
             className={`mt-2 ${inputStyle}`}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Tuesday Night League"
+            placeholder="e.g. Tuesday League"
             maxLength={120}
             autoFocus
           />

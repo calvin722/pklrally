@@ -75,6 +75,14 @@ export default function LeagueDashboard({ leagueId, isAdmin }: Props) {
             +{league.win_bonus} win bonus
             {league.court_rules ? ` · "${league.court_rules}"` : ""}
           </p>
+          {league.status !== "setup" && (
+            <Link
+              href={`/leagues/${league.id}/stats`}
+              className="mt-2 inline-flex items-center gap-1 text-xs text-pickle hover:underline"
+            >
+              📊 View per-player charts →
+            </Link>
+          )}
         </div>
         <StatusPill status={league.status} round={league.current_round} total={league.n_rounds} />
       </div>
@@ -560,7 +568,7 @@ function InProgressPanel({
                 disabled={busy}
                 className="rounded-lg border-2 border-white/40 px-6 py-3 font-display text-display-xs font-bold uppercase tracking-wide text-white/70 transition hover:border-bright hover:text-bright"
               >
-                End League Night Now
+                End League Now
               </button>
             </div>
           )}
@@ -634,7 +642,7 @@ function FinishedPanel({
               <span className="font-display text-display-lg font-extrabold text-pickle">
                 {standings[0].display_name}
               </span>{" "}
-              wins the night with{" "}
+              wins the league with{" "}
               <span className="font-bold">{standings[0].total_points} points</span>.
             </>
           ) : (

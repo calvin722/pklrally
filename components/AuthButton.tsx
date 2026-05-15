@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import Avatar from "./Avatar";
+import StartLeagueModal from "./leagues/StartLeagueModal";
 
 interface PlayerLite {
   id: string;
@@ -30,6 +31,7 @@ export default function AuthButton() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [pendingVouches, setPendingVouches] = useState(0);
+  const [startLeagueOpen, setStartLeagueOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -159,7 +161,20 @@ export default function AuthButton() {
           <MenuItem href="/rally/new" icon="▶" label="Log a Rally" onClick={() => setOpen(false)} />
           <MenuItem href="/stats" icon="📊" label="My Stats" onClick={() => setOpen(false)} />
           <MenuItem href="/ladder" icon="🏆" label="Monthly Ladder" onClick={() => setOpen(false)} />
-          <MenuItem href="/leagues/new" icon="👥" label="Create a League" comingSoon />
+          <MenuItem
+            action={() => {
+              setOpen(false);
+              setStartLeagueOpen(true);
+            }}
+            icon="👥"
+            label="Start a League"
+          />
+          <MenuItem
+            href="/leagues?status=finished"
+            icon="📜"
+            label="Past Leagues"
+            onClick={() => setOpen(false)}
+          />
           <MenuItem href="/courts/suggest" icon="📍" label="Suggest a Court" onClick={() => setOpen(false)} />
           <MenuItem href="/settings" icon="⚙" label="Settings" onClick={() => setOpen(false)} />
           {player.is_admin && (
@@ -177,6 +192,11 @@ export default function AuthButton() {
           </form>
         </div>
       )}
+
+      <StartLeagueModal
+        open={startLeagueOpen}
+        onClose={() => setStartLeagueOpen(false)}
+      />
     </div>
   );
 }
@@ -280,7 +300,10 @@ async function fetchPendingVouchesCount(
 // =============================================================
 
 interface MenuItemProps {
-  href: string;
+  /** Where to navigate. Omit if using `action` for non-nav items. */
+  href?: string;
+  /** Custom click handler. Renders the row as a <button> when provided. */
+  action?: () => void;
   icon: string;
   label: string;
   badge?: number;
@@ -291,6 +314,7 @@ interface MenuItemProps {
 
 function MenuItem({
   href,
+  action,
   icon,
   label,
   badge,
@@ -322,12 +346,8 @@ function MenuItem({
     );
   }
 
-  return (
-    <Link
-      href={href}
-      onClick={onClick}
-      className={`flex items-center justify-between border-t-2 border-pickle/40 px-4 py-3 text-base transition ${accentClass}`}
-    >
+  const inner = (
+    <>
       <span className="flex items-center gap-3">
         <span aria-hidden>{icon}</span>
         <span>{label}</span>
@@ -337,6 +357,29 @@ function MenuItem({
           {badge}
         </span>
       )}
+    </>
+  );
+
+  const className = `flex w-full items-center justify-between border-t-2 border-pickle/40 px-4 py-3 text-left text-base transition ${accentClass}`;
+
+  if (action) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          onClick?.();
+          action();
+        }}
+        className={className}
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return (
+    <Link href={href ?? "#"} onClick={onClick} className={className}>
+      {inner}
     </Link>
   );
 }
