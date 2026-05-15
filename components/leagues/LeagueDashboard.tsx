@@ -6,6 +6,7 @@ import {
   type LeagueState,
   type LeagueMatch,
   type LeagueRound,
+  type LeaguePrize,
   type Standing,
   fetchLeagueState,
   addLeaguePlayer,
@@ -16,13 +17,20 @@ import {
   deleteLeague,
 } from "@/lib/leagues";
 import { searchPlayers } from "@/lib/rally";
+import { createClient } from "@/lib/supabase/client";
+import InvitePanel from "./InvitePanel";
 
 interface Props {
   leagueId: string;
   isAdmin: boolean;
+  currentPlayerId: string | null;
 }
 
-export default function LeagueDashboard({ leagueId, isAdmin }: Props) {
+export default function LeagueDashboard({
+  leagueId,
+  isAdmin,
+  currentPlayerId,
+}: Props) {
   const [state, setState] = useState<LeagueState | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -58,7 +66,7 @@ export default function LeagueDashboard({ leagueId, isAdmin }: Props) {
     return <div className="mt-10 text-bright">League not found.</div>;
   }
 
-  const { league, players, rounds, matches, standings } = state;
+  const { league, players, rounds, matches, standings, prizes } = state;
   const minPlayers = league.n_courts * 4;
   const ready = players.length >= minPlayers;
 
@@ -93,6 +101,16 @@ export default function LeagueDashboard({ leagueId, isAdmin }: Props) {
         </p>
       )}
 
+      {/* Meta — description, date/court, prizes teaser */}
+      <LeagueMeta league={league} prizes={prizes} />
+
+      {/* Invite panel — admin only, visible in setup + in_progress states */}
+      {isAdmin && currentPlayerId && league.status !== "finished" && (
+        <div className="mt-6">
+          <InvitePanel leagueId={leagueId} invitedBy={currentPlayerId} />
+        </div>
+      )}
+
       {/* Body: switch on status */}
       <div className="mt-8">
         {league.status === "setup" && (
@@ -122,6 +140,7 @@ export default function LeagueDashboard({ leagueId, isAdmin }: Props) {
             rounds={rounds}
             matches={matches}
             standings={standings}
+            prizes={prizes}
             isAdmin={isAdmin}
             busy={busy}
             onAdvance={() => run(() => advanceRound(leagueId))}
@@ -133,7 +152,13 @@ export default function LeagueDashboard({ leagueId, isAdmin }: Props) {
         )}
 
         {league.status === "finished" && (
-          <FinishedPanel standings={standings} rounds={rounds} matches={matches} players={players} />
+          <FinishedPanel
+            standings={standings}
+            rounds={rounds}
+            matches={matches}
+            players={players}
+            prizes={prizes}
+          />
         )}
       </div>
     </div>
@@ -487,6 +512,7 @@ function InProgressPanel({
   rounds,
   matches,
   standings,
+  prizes,
   isAdmin,
   busy,
   onAdvance,
@@ -497,6 +523,7 @@ function InProgressPanel({
   rounds: LeagueRound[];
   matches: LeagueMatch[];
   standings: Standing[];
+  prizes: LeaguePrize[];
   isAdmin: boolean;
   busy: boolean;
   onAdvance: () => void;
@@ -575,6 +602,7 @@ function InProgressPanel({
         </div>
       )}
 
+      {prizes.length > 0 && <PrizeShowcase prizes={prizes} compact />}
       <StandingsTable standings={standings} />
     </div>
   );
@@ -624,11 +652,13 @@ function CourtPreviewCard({
 // ===================================================================
 function FinishedPanel({
   standings,
+  prizes,
 }: {
   standings: Standing[];
   rounds: LeagueRound[];
   matches: LeagueMatch[];
   players: LeagueState["players"];
+  prizes: LeaguePrize[];
 }) {
   return (
     <div className="space-y-6">
@@ -650,7 +680,170 @@ function FinishedPanel({
           )}
         </div>
       </div>
+      {prizes.length > 0 && <PrizeShowcase prizes={prizes} winners={standings} />}
       <StandingsTable standings={standings} highlightTop3 />
+    </div>
+  );
+}
+
+// ===================================================================
+// LeagueMeta — description, date, court
+// ===================================================================
+function LeagueMeta({
+  league,
+  prizes,
+}: {
+  league: LeagueState["league"];
+  prizes: LeaguePrize[];
+}) {
+  const [courtLabel, setCourtLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!league.court_id) {
+      setCourtLabel(null);
+      return;
+    }
+    const supabase = createClient();
+    supabase
+      .from("courts")
+      .select("name, address, city, state")
+      .eq("id", league.court_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return;
+        const parts = [data.name, data.city && `${data.city}, ${data.state}`]
+          .filter(Boolean)
+          .join(" · ");
+        setCourtLabel(parts);
+      });
+  }, [league.court_id]);
+
+  const dateLabel = league.scheduled_at
+    ? new Date(league.scheduled_at).toLocaleString("en-US", {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+
+  const manual =
+    league.manual_court_name || league.manual_court_address
+      ? [league.manual_court_name, league.manual_court_address]
+          .filter(Boolean)
+          .join(" — ")
+      : null;
+
+  const hasAnyMeta =
+    league.description ||
+    dateLabel ||
+    courtLabel ||
+    manual ||
+    prizes.length > 0;
+  if (!hasAnyMeta) return null;
+
+  return (
+    <div className="mt-5 grid gap-3 rounded-2xl border-2 border-white/10 bg-white/[0.03] px-5 py-4 md:grid-cols-[1fr_auto]">
+      <div className="space-y-2">
+        {league.description && (
+          <p className="whitespace-pre-line text-sm leading-relaxed text-white/80">
+            {league.description}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          {dateLabel && (
+            <span className="text-white/70">
+              <span className="text-pickle">📅</span> {dateLabel}
+            </span>
+          )}
+          {courtLabel && (
+            <span className="text-white/70">
+              <span className="text-pickle">📍</span> {courtLabel}
+            </span>
+          )}
+          {manual && (
+            <span className="text-white/70">
+              <span className="text-pickle">📍</span> {manual}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================================================================
+// PrizeShowcase — shown on dashboard (compact) and final standings (big)
+// ===================================================================
+function PrizeShowcase({
+  prizes,
+  compact = false,
+  winners,
+}: {
+  prizes: LeaguePrize[];
+  compact?: boolean;
+  winners?: Standing[];
+}) {
+  const sorted = [...prizes].sort((a, b) => a.place - b.place);
+  const PLACE_LABELS: Record<number, string> = {
+    1: "🥇 1st place",
+    2: "🥈 2nd place",
+    3: "🥉 3rd place",
+  };
+  return (
+    <div>
+      <h2 className="font-display text-display-base font-bold text-bright">
+        {compact ? "Playing for" : "Prizes"}
+      </h2>
+      <div
+        className={`mt-3 grid gap-3 ${
+          compact ? "md:grid-cols-3" : "md:grid-cols-3"
+        }`}
+      >
+        {sorted.map((p) => {
+          const winner = winners?.[p.place - 1];
+          return (
+            <div
+              key={p.id}
+              className={`rounded-2xl border-2 px-4 py-3 ${
+                p.place === 1
+                  ? "border-bright bg-bright/5"
+                  : "border-pickle/40 bg-pickle/5"
+              }`}
+            >
+              <div className="font-display text-display-xs uppercase font-bold tracking-wide text-bright">
+                {PLACE_LABELS[p.place]}
+              </div>
+              {winner && (
+                <div className="mt-1 truncate font-display text-display-sm font-extrabold text-pickle">
+                  {winner.display_name}
+                </div>
+              )}
+              {p.description && (
+                <div className="mt-1 text-sm text-white/90">
+                  {p.description}
+                </div>
+              )}
+              {p.sponsor_name && (
+                <div className="mt-1 text-xs uppercase tracking-wide text-white/50">
+                  sponsored by {p.sponsor_name}
+                </div>
+              )}
+              {p.sponsor_image_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={p.sponsor_image_url}
+                  alt={p.sponsor_name ?? `Prize ${p.place} sponsor`}
+                  className={`mt-2 w-full rounded-lg border-2 border-white/10 bg-black object-contain ${
+                    compact ? "h-16" : "h-32"
+                  }`}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

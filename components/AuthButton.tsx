@@ -170,6 +170,12 @@ export default function AuthButton() {
             label="Start a League"
           />
           <MenuItem
+            href="/leagues/manage"
+            icon="🗂"
+            label="Manage My Leagues"
+            onClick={() => setOpen(false)}
+          />
+          <MenuItem
             href="/leagues?status=finished"
             icon="📜"
             label="Past Leagues"

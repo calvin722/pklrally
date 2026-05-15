@@ -34,7 +34,11 @@ export default async function LeaguePage({ params }: PageProps) {
         >
           ◀ Leagues
         </Link>
-        <LeagueDashboard leagueId={id} isAdmin={isAdmin} />
+        <LeagueDashboard
+          leagueId={id}
+          isAdmin={isAdmin}
+          currentPlayerId={me?.id ?? null}
+        />
       </div>
     </div>
   );

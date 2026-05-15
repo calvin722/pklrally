@@ -34,8 +34,12 @@ export type PartnerMode = "shuffled" | "fixed";
 export interface League {
   id: string;
   name: string;
+  description: string | null;
+  scheduled_at: string | null;
   created_by: string;
   court_id: string | null;
+  manual_court_name: string | null;
+  manual_court_address: string | null;
   n_courts: number;
   n_rounds: number;
   win_bonus: number;
@@ -47,6 +51,32 @@ export interface League {
   player_order: string[];
   created_at: string;
   updated_at: string;
+}
+
+export interface LeaguePrize {
+  id: string;
+  league_id: string;
+  place: 1 | 2 | 3;
+  description: string | null;
+  sponsor_name: string | null;
+  sponsor_image_path: string | null;
+  /** Public URL for the sponsor image (derived from path). */
+  sponsor_image_url: string | null;
+}
+
+export type InviteStatus = "pending" | "accepted" | "declined";
+
+export interface LeagueInvite {
+  id: string;
+  league_id: string;
+  email: string;
+  phone: string | null;
+  invited_by: string;
+  status: InviteStatus;
+  player_id: string | null;
+  invite_token: string;
+  created_at: string;
+  responded_at: string | null;
 }
 
 export interface LeaguePlayer {
@@ -109,6 +139,7 @@ export interface LeagueState {
   rounds: LeagueRound[];
   matches: LeagueMatch[];
   standings: Standing[];
+  prizes: LeaguePrize[];
 }
 
 export type RoundResult = "win" | "loss" | "bye" | "pending";
@@ -136,8 +167,12 @@ export interface PlayerRoundPoints {
 
 export async function createLeague(input: {
   name: string;
+  description?: string | null;
+  scheduledAt?: Date | string | null;
   createdBy: string;
   courtId?: string | null;
+  manualCourtName?: string | null;
+  manualCourtAddress?: string | null;
   nCourts: number;
   nRounds: number;
   winBonus: number;
@@ -146,12 +181,21 @@ export async function createLeague(input: {
   partnerMode?: PartnerMode;
 }): Promise<{ id: string }> {
   const supabase = createClient();
+  const scheduled = input.scheduledAt
+    ? typeof input.scheduledAt === "string"
+      ? input.scheduledAt
+      : input.scheduledAt.toISOString()
+    : null;
   const { data, error } = await supabase
     .from("leagues")
     .insert({
       name: input.name.trim(),
+      description: input.description?.trim() || null,
+      scheduled_at: scheduled,
       created_by: input.createdBy,
       court_id: input.courtId ?? null,
+      manual_court_name: input.manualCourtName?.trim() || null,
+      manual_court_address: input.manualCourtAddress?.trim() || null,
       n_courts: input.nCourts,
       n_rounds: input.nRounds,
       win_bonus: input.winBonus,
@@ -163,6 +207,158 @@ export async function createLeague(input: {
     .single();
   if (error) throw new Error(error.message);
   return data;
+}
+
+/** Upload a sponsor image to the league-prizes bucket and return its public URL + path. */
+export async function uploadPrizeImage(
+  leagueId: string,
+  place: 1 | 2 | 3,
+  file: File,
+): Promise<{ path: string; publicUrl: string }> {
+  const supabase = createClient();
+  const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+  const path = `${leagueId}/place-${place}-${Date.now()}.${ext}`;
+  const { error } = await supabase.storage
+    .from("league-prizes")
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (error) throw new Error(error.message);
+  const { data } = supabase.storage.from("league-prizes").getPublicUrl(path);
+  return { path, publicUrl: data.publicUrl };
+}
+
+/** Insert or update a single prize row. */
+export async function savePrize(input: {
+  leagueId: string;
+  place: 1 | 2 | 3;
+  description?: string | null;
+  sponsorName?: string | null;
+  sponsorImagePath?: string | null;
+}): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("league_prizes")
+    .upsert(
+      {
+        league_id: input.leagueId,
+        place: input.place,
+        description: input.description?.trim() || null,
+        sponsor_name: input.sponsorName?.trim() || null,
+        sponsor_image_path: input.sponsorImagePath ?? null,
+      },
+      { onConflict: "league_id,place" },
+    );
+  if (error) throw new Error(error.message);
+}
+
+export async function deletePrize(leagueId: string, place: 1 | 2 | 3): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("league_prizes")
+    .delete()
+    .eq("league_id", leagueId)
+    .eq("place", place);
+  if (error) throw new Error(error.message);
+}
+
+/** Fetch prizes for a league with public URLs resolved. */
+export async function fetchPrizes(leagueId: string): Promise<LeaguePrize[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("league_prizes")
+    .select("*")
+    .eq("league_id", leagueId)
+    .order("place", { ascending: true });
+  if (error || !data) return [];
+  return data.map((p) => {
+    let publicUrl: string | null = null;
+    if (p.sponsor_image_path) {
+      const { data: urlData } = supabase.storage
+        .from("league-prizes")
+        .getPublicUrl(p.sponsor_image_path);
+      publicUrl = urlData.publicUrl;
+    }
+    return { ...p, sponsor_image_url: publicUrl } as LeaguePrize;
+  });
+}
+
+// =====================================================================
+// Invites
+// =====================================================================
+
+/** Create a pending invite for the given email. */
+export async function createInvite(input: {
+  leagueId: string;
+  email: string;
+  phone?: string;
+  invitedBy: string;
+}): Promise<{ id: string; token: string }> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("league_invites")
+    .upsert(
+      {
+        league_id: input.leagueId,
+        email: input.email.trim().toLowerCase(),
+        phone: input.phone?.trim() || null,
+        invited_by: input.invitedBy,
+      },
+      { onConflict: "league_id,email", ignoreDuplicates: false },
+    )
+    .select("id, invite_token")
+    .single();
+  if (error) throw new Error(error.message);
+  return { id: data.id, token: data.invite_token };
+}
+
+export async function fetchInvites(leagueId: string): Promise<LeagueInvite[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("league_invites")
+    .select("*")
+    .eq("league_id", leagueId)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("fetchInvites failed:", error);
+    return [];
+  }
+  return (data ?? []) as LeagueInvite[];
+}
+
+/** Public RSVP — calls the SECURITY DEFINER RPC, no auth required. */
+export async function respondToInvite(input: {
+  token: string;
+  action: "accept" | "decline";
+  displayName?: string;
+}): Promise<{ leagueId: string; status: InviteStatus; playerId: string | null }> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("respond_to_league_invite", {
+    p_token: input.token,
+    p_action: input.action,
+    p_display_name: input.displayName ?? null,
+  });
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    leagueId: row?.league_id ?? "",
+    status: (row?.status ?? "pending") as InviteStatus,
+    playerId: row?.player_id ?? null,
+  };
+}
+
+/** Send the invite email via the /api/invite/league route. */
+export async function sendInviteEmail(input: {
+  leagueId: string;
+  inviteId: string;
+}): Promise<void> {
+  const res = await fetch("/api/invite/league", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Email send failed: ${body}`);
+  }
 }
 
 /**
@@ -296,8 +492,9 @@ export async function fetchLeagueState(leagueId: string): Promise<LeagueState | 
   const matches = (matchesRaw ?? []) as LeagueMatch[];
 
   const standings = computeStandings(league, players, matches);
+  const prizes = await fetchPrizes(leagueId);
 
-  return { league, players, rounds, matches, standings };
+  return { league, players, rounds, matches, standings, prizes };
 }
 
 // =====================================================================

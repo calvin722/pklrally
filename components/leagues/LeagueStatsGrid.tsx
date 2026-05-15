@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   type LeagueState,
   type PlayerRoundPoints,
@@ -13,9 +13,15 @@ interface Props {
   leagueId: string;
 }
 
+/**
+ * Single combined chart: every player's cumulative points across rounds.
+ * X = round number, Y = cumulative points. Hovering a legend row
+ * highlights that player's line.
+ */
 export default function LeagueStatsGrid({ leagueId }: Props) {
   const [state, setState] = useState<LeagueState | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hover, setHover] = useState<string | null>(null);
 
   useEffect(() => {
     fetchLeagueState(leagueId).then((s) => {
@@ -24,121 +30,98 @@ export default function LeagueStatsGrid({ leagueId }: Props) {
     });
   }, [leagueId]);
 
+  // Build cumulative series for every player, even when state is null,
+  // so hooks stay in a consistent order between renders.
+  const series = useMemo(() => {
+    if (!state) return [] as Array<PlayerRoundPoints & {
+      color: string;
+      cumulative: number[];
+    }>;
+    const stats = computePlayerRoundPoints(
+      state.league,
+      state.players,
+      state.rounds,
+      state.matches,
+    );
+    return stats.map((p, idx) => {
+      let acc = 0;
+      const cumulative = p.per_round.map((r) => {
+        if (r.result !== "pending") acc += r.points;
+        return acc;
+      });
+      return { ...p, color: colorForIndex(idx, stats.length), cumulative };
+    });
+  }, [state]);
+
   if (loading) {
     return <div className="mt-10 text-white/50">Loading stats…</div>;
   }
   if (!state) {
     return <div className="mt-10 text-bright">League not found.</div>;
   }
+  if (series.length === 0) {
+    return <div className="mt-10 text-white/50">No players yet.</div>;
+  }
 
-  const { league, players, rounds, matches } = state;
-  const stats = computePlayerRoundPoints(league, players, rounds, matches);
-
-  // Compute shared Y-axis maximum across all players so cards are comparable.
+  const nRounds = state.league.n_rounds;
+  // Max Y so all lines fit. Round up to a clean tick.
   let maxY = 0;
-  for (const s of stats)
-    for (const r of s.per_round) if (r.points > maxY) maxY = r.points;
-  // Round up to a clean tick (multiple of 5) for nicer Y labels
-  maxY = Math.max(5, Math.ceil(maxY / 5) * 5);
+  for (const p of series) {
+    for (const c of p.cumulative) if (c > maxY) maxY = c;
+  }
+  maxY = Math.max(20, Math.ceil(maxY / 20) * 20);
 
   return (
-    <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {stats.map((s, i) => (
-        <PlayerStatCard
-          key={s.player_id}
-          rank={i + 1}
-          stats={s}
+    <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_280px]">
+      <div className="rounded-2xl border-2 border-pickle bg-pickle/5 p-4">
+        <CombinedChart
+          series={series}
+          nRounds={nRounds}
           maxY={maxY}
-          nRounds={league.n_rounds}
+          highlight={hover}
         />
-      ))}
+      </div>
+      <Legend
+        series={series}
+        highlight={hover}
+        onHover={setHover}
+      />
     </div>
   );
 }
 
-// ----------------------------------------------------------------
-// Per-player card with mini line graph
-// ----------------------------------------------------------------
-function PlayerStatCard({
-  rank,
-  stats,
-  maxY,
+// =====================================================================
+// Combined chart
+// =====================================================================
+function CombinedChart({
+  series,
   nRounds,
-}: {
-  rank: number;
-  stats: PlayerRoundPoints;
-  maxY: number;
-  nRounds: number;
-}) {
-  const isPodium = rank <= 3;
-  return (
-    <div
-      className={`rounded-2xl border-2 px-4 py-3 ${
-        isPodium ? "border-bright bg-bright/5" : "border-pickle/40 bg-pickle/5"
-      }`}
-    >
-      <div className="flex items-center gap-3">
-        <Avatar player={stats} size="md" />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-xs text-white/50">#{rank}</span>
-            <span className="truncate font-display text-display-sm font-bold text-white">
-              {stats.display_name}
-            </span>
-          </div>
-          <div className="font-display text-display-base font-extrabold text-pickle">
-            {stats.total_points}
-            <span className="ml-1 text-xs font-normal text-white/50">pts</span>
-          </div>
-        </div>
-      </div>
-      <div className="mt-3">
-        <LineGraph perRound={stats.per_round} maxY={maxY} nRounds={nRounds} />
-      </div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------
-// SVG line graph
-// ----------------------------------------------------------------
-function LineGraph({
-  perRound,
   maxY,
-  nRounds,
+  highlight,
 }: {
-  perRound: PlayerRoundPoints["per_round"];
-  maxY: number;
+  series: Array<PlayerRoundPoints & { color: string; cumulative: number[] }>;
   nRounds: number;
+  maxY: number;
+  highlight: string | null;
 }) {
-  const W = 280;
-  const H = 110;
-  const padL = 28;
-  const padR = 8;
-  const padT = 8;
-  const padB = 20;
+  const W = 800;
+  const H = 460;
+  const padL = 48;
+  const padR = 16;
+  const padT = 16;
+  const padB = 40;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
-
   const xStep = nRounds > 1 ? plotW / (nRounds - 1) : 0;
 
-  function xOf(round: number) {
-    return padL + (round - 1) * xStep;
-  }
-  function yOf(pts: number) {
-    return padT + (1 - pts / maxY) * plotH;
-  }
+  const xOf = (round: number) => padL + (round - 1) * xStep;
+  const yOf = (pts: number) => padT + (1 - pts / maxY) * plotH;
 
-  // Build polyline (skips pending rounds at the end so the line doesn't
-  // drop to 0 for not-yet-played rounds).
-  const linePoints: string[] = [];
-  for (const r of perRound) {
-    if (r.result === "pending") break;
-    linePoints.push(`${xOf(r.round)},${yOf(r.points)}`);
-  }
-
-  // Y-axis ticks: 0 and maxY
-  const yTicks = [0, Math.floor(maxY / 2), maxY];
+  // Y ticks: ~5 evenly spaced
+  const tickCount = 5;
+  const yTicks = Array.from({ length: tickCount + 1 }, (_, i) =>
+    Math.round((maxY * i) / tickCount),
+  );
 
   return (
     <svg
@@ -147,27 +130,10 @@ function LineGraph({
       height={H}
       preserveAspectRatio="xMidYMid meet"
       role="img"
-      aria-label="Points per round"
+      aria-label="Cumulative points per round, all players"
+      className="touch-pan-y"
     >
-      {/* Axes */}
-      <line
-        x1={padL}
-        y1={padT}
-        x2={padL}
-        y2={padT + plotH}
-        stroke="rgba(255,255,255,0.2)"
-        strokeWidth="1"
-      />
-      <line
-        x1={padL}
-        y1={padT + plotH}
-        x2={W - padR}
-        y2={padT + plotH}
-        stroke="rgba(255,255,255,0.2)"
-        strokeWidth="1"
-      />
-
-      {/* Y ticks */}
+      {/* Y-axis gridlines + labels */}
       {yTicks.map((t) => (
         <g key={t}>
           <line
@@ -175,16 +141,16 @@ function LineGraph({
             y1={yOf(t)}
             x2={W - padR}
             y2={yOf(t)}
-            stroke="rgba(255,255,255,0.06)"
+            stroke="rgba(255,255,255,0.08)"
             strokeWidth="1"
           />
           <text
-            x={padL - 4}
+            x={padL - 6}
             y={yOf(t)}
-            fontSize="9"
+            fontSize="11"
             textAnchor="end"
             dominantBaseline="middle"
-            fill="rgba(255,255,255,0.4)"
+            fill="rgba(255,255,255,0.5)"
             fontFamily="monospace"
           >
             {t}
@@ -192,76 +158,201 @@ function LineGraph({
         </g>
       ))}
 
-      {/* X labels — rounds */}
-      {perRound.map((r) => (
-        <text
-          key={r.round}
-          x={xOf(r.round)}
-          y={padT + plotH + 12}
-          fontSize="9"
-          textAnchor="middle"
-          fill="rgba(255,255,255,0.45)"
-          fontFamily="monospace"
-        >
-          {r.round}
-        </text>
+      {/* X-axis labels */}
+      {Array.from({ length: nRounds }, (_, i) => i + 1).map((r) => (
+        <g key={r}>
+          <line
+            x1={xOf(r)}
+            y1={padT}
+            x2={xOf(r)}
+            y2={padT + plotH}
+            stroke="rgba(255,255,255,0.04)"
+            strokeWidth="1"
+          />
+          <text
+            x={xOf(r)}
+            y={padT + plotH + 18}
+            fontSize="11"
+            textAnchor="middle"
+            fill="rgba(255,255,255,0.5)"
+            fontFamily="monospace"
+          >
+            R{r}
+          </text>
+        </g>
       ))}
 
-      {/* Connecting line through played rounds */}
+      {/* Axis lines */}
+      <line
+        x1={padL}
+        y1={padT}
+        x2={padL}
+        y2={padT + plotH}
+        stroke="rgba(255,255,255,0.3)"
+        strokeWidth="1"
+      />
+      <line
+        x1={padL}
+        y1={padT + plotH}
+        x2={W - padR}
+        y2={padT + plotH}
+        stroke="rgba(255,255,255,0.3)"
+        strokeWidth="1"
+      />
+
+      {/* Lines — non-highlighted first, then highlighted on top */}
+      {series
+        .filter((p) => highlight === null || highlight !== p.player_id)
+        .map((p) => (
+          <PlayerLine
+            key={p.player_id}
+            p={p}
+            xOf={xOf}
+            yOf={yOf}
+            faded={highlight !== null}
+          />
+        ))}
+      {highlight !== null &&
+        series
+          .filter((p) => p.player_id === highlight)
+          .map((p) => (
+            <PlayerLine
+              key={p.player_id}
+              p={p}
+              xOf={xOf}
+              yOf={yOf}
+              emphasized
+            />
+          ))}
+
+      {/* Y-axis title (rotated) */}
+      <text
+        x={14}
+        y={padT + plotH / 2}
+        fontSize="10"
+        textAnchor="middle"
+        transform={`rotate(-90 14 ${padT + plotH / 2})`}
+        fill="rgba(255,255,255,0.45)"
+        fontFamily="monospace"
+      >
+        Cumulative points
+      </text>
+    </svg>
+  );
+}
+
+function PlayerLine({
+  p,
+  xOf,
+  yOf,
+  faded = false,
+  emphasized = false,
+}: {
+  p: PlayerRoundPoints & { color: string; cumulative: number[] };
+  xOf: (r: number) => number;
+  yOf: (pts: number) => number;
+  faded?: boolean;
+  emphasized?: boolean;
+}) {
+  // Build polyline through played rounds only — break at pending so the
+  // line doesn't drop to 0 for not-yet-played rounds.
+  const linePoints: string[] = [];
+  for (let i = 0; i < p.per_round.length; i++) {
+    const r = p.per_round[i];
+    if (r.result === "pending") break;
+    linePoints.push(`${xOf(r.round)},${yOf(p.cumulative[i])}`);
+  }
+  const opacity = faded ? 0.18 : emphasized ? 1 : 0.85;
+  const strokeWidth = emphasized ? 3 : 1.8;
+
+  return (
+    <g opacity={opacity}>
       {linePoints.length >= 2 && (
         <polyline
           fill="none"
-          stroke="#99FF00"
-          strokeWidth="2"
+          stroke={p.color}
+          strokeWidth={strokeWidth}
           strokeLinejoin="round"
           strokeLinecap="round"
           points={linePoints.join(" ")}
         />
       )}
-
-      {/* Markers */}
-      {perRound.map((r) => {
-        const cx = xOf(r.round);
-        const cy = yOf(r.points);
-        if (r.result === "win") {
-          return (
-            <circle
-              key={r.round}
-              cx={cx}
-              cy={cy}
-              r="4"
-              fill="#99FF00"
-              stroke="#000"
-              strokeWidth="1.5"
-            />
-          );
-        }
-        if (r.result === "loss") {
-          return (
-            <circle
-              key={r.round}
-              cx={cx}
-              cy={cy}
-              r="3.5"
-              fill="none"
-              stroke="#99FF00"
-              strokeWidth="2"
-            />
-          );
-        }
-        if (r.result === "bye") {
-          // small "×" at zero line
-          const y0 = yOf(0);
-          return (
-            <g key={r.round} stroke="rgba(255,255,255,0.3)" strokeWidth="1.5">
-              <line x1={cx - 3} y1={y0 - 3} x2={cx + 3} y2={y0 + 3} />
-              <line x1={cx - 3} y1={y0 + 3} x2={cx + 3} y2={y0 - 3} />
-            </g>
-          );
-        }
-        // pending — nothing
-        return null;
+      {p.per_round.map((r, i) => {
+        if (r.result === "pending") return null;
+        return (
+          <circle
+            key={r.round}
+            cx={xOf(r.round)}
+            cy={yOf(p.cumulative[i])}
+            r={emphasized ? 4 : 2.5}
+            fill={p.color}
+            stroke="#000"
+            strokeWidth="1"
+          />
+        );
       })}
-    </svg>
+    </g>
   );
+}
+
+// =====================================================================
+// Legend (sortable list, avatar + name + total)
+// =====================================================================
+function Legend({
+  series,
+  highlight,
+  onHover,
+}: {
+  series: Array<PlayerRoundPoints & { color: string; cumulative: number[] }>;
+  highlight: string | null;
+  onHover: (id: string | null) => void;
+}) {
+  return (
+    <div className="rounded-2xl border-2 border-pickle/40 bg-pickle/5 p-3">
+      <div className="px-2 pb-2 font-display text-display-xs uppercase font-bold tracking-wide text-pickle">
+        Players · hover to highlight
+      </div>
+      <ul className="max-h-[460px] overflow-y-auto">
+        {series.map((p, i) => {
+          const dimmed = highlight !== null && highlight !== p.player_id;
+          return (
+            <li
+              key={p.player_id}
+              onMouseEnter={() => onHover(p.player_id)}
+              onMouseLeave={() => onHover(null)}
+              className={`flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5 transition ${
+                dimmed ? "opacity-40" : ""
+              } ${highlight === p.player_id ? "bg-white/5" : "hover:bg-white/5"}`}
+            >
+              <span
+                aria-hidden
+                className="h-3 w-3 shrink-0 rounded-full"
+                style={{ background: p.color }}
+              />
+              <span className="w-5 font-mono text-xs text-white/50">
+                #{i + 1}
+              </span>
+              <Avatar player={p} size="xs" />
+              <span className="min-w-0 flex-1 truncate text-sm text-white">
+                {p.display_name}
+              </span>
+              <span className="font-mono text-xs font-bold text-pickle">
+                {p.total_points}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+// =====================================================================
+// Color palette — evenly spaced hues so 20 lines stay distinguishable
+// =====================================================================
+function colorForIndex(i: number, n: number): string {
+  const total = Math.max(n, 1);
+  const hue = (i * 360) / total;
+  // Bright but readable on a dark background
+  return `hsl(${hue.toFixed(0)} 85% 60%)`;
 }
