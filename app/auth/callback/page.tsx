@@ -97,23 +97,9 @@ export default function AuthCallbackPage() {
       //   - Count pending vouches
       try {
         const { data: checkRows } = await supabase.rpc("post_sign_in_check");
-        const check = Array.isArray(checkRows) ? checkRows[0] : checkRows;
-        const wasJustClaimed = check?.was_just_claimed === true;
-        const pendingVouches = Number(check?.pending_vouches ?? 0);
-
-        // Fire the welcome-vouch email once on first claim
-        if (wasJustClaimed && pendingVouches > 0) {
-          // Don't await — fire and forget, no need to block redirect
-          fetch("/api/welcome-vouch", { method: "POST" }).catch(() => {});
-        }
-
-        // Route to /vouch if there are pending matches AND we just claimed,
-        // so the new user lands directly on their inbox.
-        if (wasJustClaimed && pendingVouches > 0) {
-          router.replace("/vouch?welcome=1");
-          router.refresh();
-          return;
-        }
+        // post_sign_in_check is preserved for future use, but vouch
+        // routing was removed when the rally/match feature was retired.
+        // Just fall through to default routing.
       } catch (e) {
         // Non-fatal — fall through to default routing
         console.warn("post_sign_in_check failed:", e);

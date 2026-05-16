@@ -78,13 +78,13 @@ export default async function AdminSponsorshipsPage() {
       {/* Quick links to live ladders */}
       <section className="mt-10">
         <h2 className="font-display text-display-md font-extrabold text-pickle">
-          Live ladder pages
+          Live open-play pages
         </h2>
         <div className="mt-3 flex flex-wrap gap-2">
           {cityOptions.map((c) => (
             <Link
               key={`${c.state}-${c.city}`}
-              href={`/ladder/${c.state.toLowerCase()}/${citySlug(c.city)}`}
+              href={`/play/${c.state.toLowerCase()}/${citySlug(c.city)}`}
               target="_blank"
               className="rounded-md border-2 border-white/20 px-3 py-1.5 font-display text-display-xs uppercase font-semibold tracking-wide text-white/70 transition hover:border-pickle hover:text-pickle"
             >

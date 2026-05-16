@@ -239,17 +239,17 @@ function RecordGamesSlide({
 }) {
   return (
     <div className="space-y-4">
-      <span aria-hidden className="text-display-xl">▶</span>
+      <span aria-hidden className="text-display-xl">🏆</span>
       <h2 className="font-display text-display-2xl font-extrabold leading-tight text-bright">
-        Record Your Games
+        Start a Ladder League
       </h2>
       <p className="font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
-        every win counts
+        King of the Court — over a day or a season
       </p>
       <p className="text-base text-white/80 leading-relaxed">
-        After each match, log it on PKLRALLY. Your opponent vouches the score,
-        and your stats start building. The more you play, the more your record
-        speaks for itself.
+        Run your own league. Pick the courts, the rounds, single day or weekly
+        for several weeks. Winners climb, losers slide. Fresh partners every
+        round. The app does the math — you just enter the scores.
       </p>
       <div className="flex items-center justify-between pt-2">
         <BackButton onClick={onBack} />
@@ -268,17 +268,17 @@ function LocalPrizesSlide({
 }) {
   return (
     <div className="space-y-4">
-      <span aria-hidden className="text-display-xl">🏆</span>
+      <span aria-hidden className="text-display-xl">🎁</span>
       <h2 className="font-display text-display-2xl font-extrabold leading-tight text-bright">
-        Climb the Ladder for Local Prizes
+        Win Local Prizes
       </h2>
       <p className="font-display text-display-xs uppercase font-bold tracking-widest text-bright">
-        every month, in every city
+        sponsored by neighborhood businesses
       </p>
       <p className="text-base text-white/80 leading-relaxed">
-        Each city runs its own monthly ladder. Climb it for a shot at prizes
-        from local businesses — gear, gift cards, swag from sponsors who care
-        about pickleball where you play.
+        Every league can have 1st/2nd/3rd prizes from local sponsors — paddles,
+        gift cards, gear, court time. Top finishers go home with something real
+        from someone in the community.
       </p>
       <p className="text-base text-pickle font-semibold">
         Always free for players.

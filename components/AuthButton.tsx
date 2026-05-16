@@ -30,7 +30,6 @@ export default function AuthButton() {
   const [player, setPlayer] = useState<PlayerLite | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [pendingVouches, setPendingVouches] = useState(0);
   const [startLeagueOpen, setStartLeagueOpen] = useState(false);
 
   useEffect(() => {
@@ -54,14 +53,6 @@ export default function AuthButton() {
         if (!mounted) return;
         setPlayer(playerRow);
         setLoading(false);
-
-        if (playerRow?.id) {
-          const count = await fetchPendingVouchesCount(
-            playerRow.id,
-            session.accessToken,
-          );
-          if (mounted) setPendingVouches(count);
-        }
       } catch (err) {
         console.error("AuthButton load failed:", err);
         if (mounted) {
@@ -118,14 +109,6 @@ export default function AuthButton() {
           <rect y="6" width="18" height="2" rx="1" fill="#99FF00" />
           <rect y="12" width="18" height="2" rx="1" fill="#99FF00" />
         </svg>
-        {pendingVouches > 0 && (
-          <span
-            className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-bright px-1.5 font-mono text-[11px] font-bold text-black"
-            aria-label={`${pendingVouches} pending vouches`}
-          >
-            {pendingVouches}
-          </span>
-        )}
       </button>
 
       {open && (
@@ -151,16 +134,7 @@ export default function AuthButton() {
           </div>
 
           <MenuItem href={`/profile/${player.id}`} icon="👤" label="My Profile" onClick={() => setOpen(false)} />
-          <MenuItem
-            href="/vouch"
-            icon="✓"
-            label="Vouch Inbox"
-            badge={pendingVouches > 0 ? pendingVouches : undefined}
-            onClick={() => setOpen(false)}
-          />
-          <MenuItem href="/rally/new" icon="▶" label="Log a Rally" onClick={() => setOpen(false)} />
           <MenuItem href="/stats" icon="📊" label="My Stats" onClick={() => setOpen(false)} />
-          <MenuItem href="/ladder" icon="🏆" label="Monthly Ladder" onClick={() => setOpen(false)} />
           <MenuItem
             action={() => {
               setOpen(false);
@@ -268,37 +242,6 @@ async function fetchPlayer(
   if (!res.ok) return null;
   const rows = await res.json();
   return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
-}
-
-async function fetchPendingVouchesCount(
-  playerId: string,
-  accessToken: string,
-): Promise<number> {
-  // Match where viewer is in any slot AND is not the logger AND status pending
-  const orFilter = [
-    `server_team_p1.eq.${playerId}`,
-    `server_team_p2.eq.${playerId}`,
-    `receiver_team_p1.eq.${playerId}`,
-    `receiver_team_p2.eq.${playerId}`,
-  ].join(",");
-  const url = `${SUPABASE_URL}/rest/v1/matches?select=id&status=eq.pending&logged_by=neq.${playerId}&or=(${orFilter})`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      apikey: ANON_KEY,
-      Accept: "application/json",
-      Prefer: "count=exact",
-    },
-  });
-  if (!res.ok) return 0;
-  // Content-Range header: "0-N/total"
-  const range = res.headers.get("content-range");
-  if (range) {
-    const total = parseInt(range.split("/")[1] ?? "0", 10);
-    return Number.isFinite(total) ? total : 0;
-  }
-  const data = await res.json();
-  return Array.isArray(data) ? data.length : 0;
 }
 
 // =============================================================

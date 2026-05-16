@@ -42,11 +42,18 @@ export interface League {
   manual_court_address: string | null;
   n_courts: number;
   n_rounds: number;
+  /** Per-session round count. Total rounds = n_rounds * n_sessions. */
+  n_sessions: number;
+  /** Which session is currently being played (1-indexed). */
+  current_session: number;
+  /** Scheduled timestamps for each session, length = n_sessions. */
+  session_dates: string[] | null;
   win_bonus: number;
   format: LeagueFormat;
   partner_mode: PartnerMode;
   court_rules: string | null;
   status: LeagueStatus;
+  /** Round number WITHIN the current session (resets each session). */
   current_round: number;
   player_order: string[];
   created_at: string;
@@ -97,6 +104,8 @@ export interface LeagueRound {
   id: string;
   league_id: string;
   round_number: number;
+  /** Which session this round belongs to (1-indexed). */
+  session_number: number;
   byes: string[];
   status: "in_progress" | "completed";
   created_at: string;
@@ -175,6 +184,8 @@ export async function createLeague(input: {
   manualCourtAddress?: string | null;
   nCourts: number;
   nRounds: number;
+  nSessions?: number;
+  sessionDates?: Array<Date | string> | null;
   winBonus: number;
   courtRules?: string | null;
   format?: LeagueFormat;
@@ -185,6 +196,11 @@ export async function createLeague(input: {
     ? typeof input.scheduledAt === "string"
       ? input.scheduledAt
       : input.scheduledAt.toISOString()
+    : null;
+  const sessionDatesIso = input.sessionDates
+    ? input.sessionDates.map((d) =>
+        typeof d === "string" ? d : d.toISOString(),
+      )
     : null;
   const { data, error } = await supabase
     .from("leagues")
@@ -198,6 +214,8 @@ export async function createLeague(input: {
       manual_court_address: input.manualCourtAddress?.trim() || null,
       n_courts: input.nCourts,
       n_rounds: input.nRounds,
+      n_sessions: input.nSessions ?? 1,
+      session_dates: sessionDatesIso,
       win_bonus: input.winBonus,
       court_rules: input.courtRules?.trim() || null,
       format: input.format ?? "kotc",
@@ -667,6 +685,7 @@ export async function generateRound1(leagueId: string): Promise<void> {
     .insert({
       league_id: leagueId,
       round_number: 1,
+      session_number: 1,
       byes: round1Byes,
       status: "in_progress",
     })
@@ -689,6 +708,7 @@ export async function generateRound1(leagueId: string): Promise<void> {
     .update({
       status: "in_progress",
       current_round: 1,
+      current_session: 1,
       player_order: ladder,
       updated_at: new Date().toISOString(),
     })
@@ -739,7 +759,11 @@ export async function advanceRound(leagueId: string): Promise<void> {
     throw new Error(`League not in progress (status=${league.status})`);
   }
 
-  const currentRound = rounds.find((r) => r.round_number === league.current_round);
+  const currentRound = rounds.find(
+    (r) =>
+      r.session_number === league.current_session &&
+      r.round_number === league.current_round,
+  );
   if (!currentRound) throw new Error("Current round not found");
 
   const currentMatches = matches.filter((m) => m.round_id === currentRound.id);
@@ -753,8 +777,12 @@ export async function advanceRound(leagueId: string): Promise<void> {
     .update({ status: "completed", completed_at: new Date().toISOString() })
     .eq("id", currentRound.id);
 
-  // If this was the last round, finish the league
-  if (league.current_round >= league.n_rounds) {
+  // Decide what comes next: another round in this session, the start of
+  // a new session, or the league is finished.
+  const atSessionEnd = league.current_round >= league.n_rounds;
+  const atFinalSession = league.current_session >= league.n_sessions;
+
+  if (atSessionEnd && atFinalSession) {
     await supabase
       .from("leagues")
       .update({
@@ -766,7 +794,10 @@ export async function advanceRound(leagueId: string): Promise<void> {
   }
 
   // ---- Compute next round ----
-  const nextRoundNumber = league.current_round + 1;
+  const nextSessionNumber = atSessionEnd
+    ? league.current_session + 1
+    : league.current_session;
+  const nextRoundNumber = atSessionEnd ? 1 : league.current_round + 1;
   const byesPerRound = players.length - league.n_courts * 4;
 
   // Tier values from current round results
@@ -819,6 +850,7 @@ export async function advanceRound(leagueId: string): Promise<void> {
     .insert({
       league_id: leagueId,
       round_number: nextRoundNumber,
+      session_number: nextSessionNumber,
       byes: nextByes,
       status: "in_progress",
     })
@@ -839,6 +871,7 @@ export async function advanceRound(leagueId: string): Promise<void> {
     .from("leagues")
     .update({
       current_round: nextRoundNumber,
+      current_session: nextSessionNumber,
       player_order: newLadder,
       updated_at: new Date().toISOString(),
     })

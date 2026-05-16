@@ -3,12 +3,23 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  type League,
   type LeagueState,
   type LeagueMatch,
   fetchLeagueState,
   saveMatchScore,
   advanceRound,
 } from "@/lib/leagues";
+
+/** Label for the "advance round" button — handles session transitions. */
+function advanceLabel(league: League): string {
+  const atSessionEnd = league.current_round >= league.n_rounds;
+  const atFinalSession = league.current_session >= league.n_sessions;
+  if (atSessionEnd && atFinalSession) return "Save & Finish League →";
+  if (atSessionEnd)
+    return `Save & Start Session ${league.current_session + 1} →`;
+  return `Save Round & Generate Round ${league.current_round + 1} →`;
+}
 
 interface Props {
   leagueId: string;
@@ -36,7 +47,11 @@ export default function ScoreEntry({ leagueId }: Props) {
   }
 
   const { league, players, rounds, matches } = state;
-  const current = rounds.find((r) => r.round_number === league.current_round);
+  const current = rounds.find(
+    (r) =>
+      r.session_number === league.current_session &&
+      r.round_number === league.current_round,
+  );
   if (!current) return <div className="mt-10 text-bright">No active round.</div>;
   const currentMatches = matches
     .filter((m) => m.round_id === current.id)
@@ -98,9 +113,7 @@ export default function ScoreEntry({ leagueId }: Props) {
             ? `Enter scores for all ${currentMatches.length} courts to continue`
             : busy
               ? "Saving…"
-              : league.current_round >= league.n_rounds
-                ? "Save & Finish League →"
-                : `Save Round & Generate Round ${league.current_round + 1} →`}
+              : advanceLabel(league)}
         </button>
       </div>
     </div>

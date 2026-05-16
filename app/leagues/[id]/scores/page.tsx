@@ -16,7 +16,9 @@ export default async function ScoresPage({ params }: PageProps) {
   const supabase = await createClient();
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, n_courts, n_rounds, current_round, status, created_by, court_rules, win_bonus")
+    .select(
+      "id, name, n_courts, n_rounds, n_sessions, current_session, current_round, status, created_by, court_rules, win_bonus",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -39,7 +41,10 @@ export default async function ScoresPage({ params }: PageProps) {
         </Link>
 
         <h1 className="mt-3 font-display text-display-2xl font-extrabold text-bright">
-          Round {league.current_round} — Enter Scores
+          {league.n_sessions > 1
+            ? `Session ${league.current_session} · Round ${league.current_round}`
+            : `Round ${league.current_round}`}{" "}
+          — Enter Scores
         </h1>
         {league.court_rules && (
           <p className="mt-1 text-sm text-white/60">

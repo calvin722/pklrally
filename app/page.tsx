@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import AuthButton from "@/components/AuthButton";
-import StartRallyButton from "@/components/StartRallyButton";
 import FindGameButton from "@/components/FindGameButton";
 import Wordmark from "@/components/Wordmark";
 import WelcomePopup from "@/components/WelcomePopup";
@@ -49,16 +48,24 @@ export default function HomePage() {
         </nav>
       </header>
 
-      {/* CTAs — Find a Game (electric) + Start Rally (pickle) above the map */}
+      {/* CTAs — Find Open Play + Start a League above the map */}
       <div className="z-20 flex justify-center gap-3 px-4 py-4">
         <FindGameButton
           className="flex-1 max-w-xs"
           onClick={() => router.push("/play")}
         />
-        <StartRallyButton
-          className="flex-1 max-w-xs"
-          onClick={() => router.push("/rally/new")}
-        />
+        <button
+          type="button"
+          onClick={() => router.push("/leagues")}
+          className="flex flex-1 max-w-xs flex-col items-center justify-center rounded-lg border-2 border-pickle bg-pickle px-4 py-3 text-black transition hover:bg-bright"
+        >
+          <span className="font-display text-display-base font-extrabold uppercase tracking-wide">
+            🏆 Start a League
+          </span>
+          <span className="text-xs font-semibold">
+            run a ladder · win local prizes
+          </span>
+        </button>
       </div>
 
       {/* The map — fills remaining height. State + city clicks both

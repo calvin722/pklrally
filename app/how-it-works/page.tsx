@@ -164,16 +164,16 @@ export default function HowItWorksPage() {
         {/* CTA */}
         <section className="mt-10 flex flex-wrap gap-3">
           <Link
-            href="/ladder"
+            href="/play"
             className="rounded-lg bg-pickle px-5 py-3 font-display text-display-xs font-bold uppercase tracking-wide text-black hover:opacity-90"
           >
-            View ladders →
+            Find open play →
           </Link>
           <Link
-            href="/rally/new"
+            href="/leagues"
             className="rounded-lg border-2 border-pickle px-5 py-3 font-display text-display-xs font-bold uppercase tracking-wide text-pickle hover:bg-pickle hover:text-black"
           >
-            Log a rally
+            Start a league
           </Link>
         </section>
       </div>

@@ -1,6 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import LeagueMonthControl from "@/components/admin/LeagueMonthControl";
-import { currentMonthKey } from "@/lib/ladder";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +8,8 @@ export default async function AdminDashboard() {
   const [
     { count: playerCount },
     { count: courtCount },
-    { count: matchCount },
-    { data: overrideRow },
+    { count: blockCount },
+    { count: leagueCount },
   ] = await Promise.all([
     supabase
       .from("players")
@@ -22,23 +20,16 @@ export default async function AdminDashboard() {
       .select("*", { count: "exact", head: true })
       .eq("status", "active"),
     supabase
-      .from("matches")
+      .from("open_play_blocks")
       .select("*", { count: "exact", head: true })
       .gte(
-        "played_at",
+        "starts_at",
         new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
       ),
     supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "league_month_override")
-      .maybeSingle(),
+      .from("leagues")
+      .select("*", { count: "exact", head: true }),
   ]);
-
-  const override =
-    typeof overrideRow?.value === "string" && overrideRow.value
-      ? overrideRow.value
-      : null;
 
   return (
     <div className="space-y-8">
@@ -50,17 +41,13 @@ export default async function AdminDashboard() {
           Operational pulse for PKLRALLY.
         </p>
 
-        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat label="Members" value={playerCount ?? 0} />
           <Stat label="Active courts" value={courtCount ?? 0} />
-          <Stat label="Matches (7d)" value={matchCount ?? 0} />
+          <Stat label="Open play (7d)" value={blockCount ?? 0} />
+          <Stat label="Leagues" value={leagueCount ?? 0} />
         </div>
       </div>
-
-      <LeagueMonthControl
-        currentOverride={override}
-        calendarMonthKey={currentMonthKey()}
-      />
     </div>
   );
 }

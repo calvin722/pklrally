@@ -28,6 +28,10 @@ export default function CreateLeagueForm({ playerId }: Props) {
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
+  const [nSessions, setNSessions] = useState(1);
+  const [sessionOverrides, setSessionOverrides] = useState<Record<number, string>>(
+    {},
+  );
 
   const [courtId, setCourtId] = useState<string | null>(null);
   const [manualCourtName, setManualCourtName] = useState("");
@@ -38,6 +42,40 @@ export default function CreateLeagueForm({ playerId }: Props) {
   const [winBonus, setWinBonus] = useState(10);
   const [courtRules, setCourtRules] = useState("11, win by 1 (hard cap)");
   const [partnerMode, setPartnerMode] = useState<"shuffled" | "fixed">("shuffled");
+
+  // Build the array of session datetimes. Session 1 comes from date+time;
+  // sessions 2..N default to +7 days from session 1 unless the user
+  // explicitly overrode a row.
+  function computeSessionDates(): Date[] | null {
+    if (!date) return null;
+    const t = time || "18:00";
+    const first = new Date(`${date}T${t}`);
+    if (Number.isNaN(first.getTime())) return null;
+    const out: Date[] = [];
+    for (let i = 0; i < nSessions; i++) {
+      const override = sessionOverrides[i];
+      if (override) {
+        const d = new Date(override);
+        if (!Number.isNaN(d.getTime())) {
+          out.push(d);
+          continue;
+        }
+      }
+      const d = new Date(first.getTime() + i * 7 * 24 * 60 * 60 * 1000);
+      out.push(d);
+    }
+    return out;
+  }
+  const sessionDatesPreview = computeSessionDates();
+
+  function setSessionOverride(i: number, value: string) {
+    setSessionOverrides((prev) => {
+      const next = { ...prev };
+      if (value) next[i] = value;
+      else delete next[i];
+      return next;
+    });
+  }
 
   const [prizes, setPrizes] = useState<[PrizeDraft, PrizeDraft, PrizeDraft]>([
     { ...EMPTY_PRIZE },
@@ -60,13 +98,8 @@ export default function CreateLeagueForm({ playerId }: Props) {
     setError(null);
 
     try {
-      // Combine date + time into a single timestamp (in user's local TZ).
-      let scheduledAt: Date | null = null;
-      if (date) {
-        const t = time || "18:00";
-        const local = new Date(`${date}T${t}`);
-        if (!Number.isNaN(local.getTime())) scheduledAt = local;
-      }
+      const sessions = sessionDatesPreview;
+      const scheduledAt = sessions?.[0] ?? null;
 
       const { id } = await createLeague({
         name,
@@ -78,6 +111,8 @@ export default function CreateLeagueForm({ playerId }: Props) {
         manualCourtAddress,
         nCourts,
         nRounds,
+        nSessions,
+        sessionDates: sessions ?? null,
         winBonus,
         courtRules,
         partnerMode,
@@ -147,7 +182,7 @@ export default function CreateLeagueForm({ playerId }: Props) {
 
         <div className="grid grid-cols-2 gap-4">
           <label className={labelStyle}>
-            Date
+            First date
             <input
               type="date"
               className={`mt-2 ${inputStyle}`}
@@ -165,6 +200,80 @@ export default function CreateLeagueForm({ playerId }: Props) {
             />
           </label>
         </div>
+
+        <div>
+          <label className={labelStyle}>
+            Number of sessions
+            <input
+              type="number"
+              min={1}
+              max={52}
+              className={`mt-2 ${inputStyle}`}
+              value={nSessions}
+              onChange={(e) =>
+                setNSessions(
+                  Math.max(1, Math.min(52, Number(e.target.value) || 1)),
+                )
+              }
+            />
+          </label>
+          <p className={helpStyle}>
+            1 = single day. More = recurring league (defaults to same day &amp;
+            time every week — you can override individual dates below).
+          </p>
+        </div>
+
+        {nSessions > 1 && sessionDatesPreview && (
+          <div className="rounded-2xl border-2 border-pickle/40 bg-pickle/5 p-4">
+            <div className="font-display text-display-xs uppercase font-bold tracking-wide text-pickle">
+              Schedule preview
+            </div>
+            <p className="mt-1 text-xs text-white/60">
+              Click any session to override its date/time. Cleared overrides
+              snap back to the default (weekly cadence).
+            </p>
+            <div className="mt-3 space-y-2">
+              {sessionDatesPreview.map((d, i) => {
+                const isoLocal =
+                  d.getFullYear() +
+                  "-" +
+                  String(d.getMonth() + 1).padStart(2, "0") +
+                  "-" +
+                  String(d.getDate()).padStart(2, "0") +
+                  "T" +
+                  String(d.getHours()).padStart(2, "0") +
+                  ":" +
+                  String(d.getMinutes()).padStart(2, "0");
+                const overridden = !!sessionOverrides[i];
+                return (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 rounded-lg border-2 border-white/15 bg-black px-3 py-2"
+                  >
+                    <span className="w-20 shrink-0 font-display text-display-xs uppercase font-bold tracking-wide text-bright">
+                      Session {i + 1}
+                    </span>
+                    <input
+                      type="datetime-local"
+                      value={isoLocal}
+                      onChange={(e) => setSessionOverride(i, e.target.value)}
+                      className="flex-1 rounded-md border-2 border-white/30 bg-black px-2 py-1.5 text-sm text-white focus:border-pickle focus:outline-none"
+                    />
+                    {overridden && (
+                      <button
+                        type="button"
+                        onClick={() => setSessionOverride(i, "")}
+                        className="text-xs text-white/40 hover:text-bright"
+                      >
+                        reset
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div>
           <div className={labelStyle}>Court</div>

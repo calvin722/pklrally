@@ -529,7 +529,11 @@ function InProgressPanel({
   onAdvance: () => void;
   onFinalize: () => void;
 }) {
-  const current = rounds.find((r) => r.round_number === league.current_round);
+  const current = rounds.find(
+    (r) =>
+      r.session_number === league.current_session &&
+      r.round_number === league.current_round,
+  );
   const currentMatches = matches.filter((m) => current && m.round_id === current.id);
   const allScored =
     currentMatches.length > 0 &&
@@ -543,6 +547,11 @@ function InProgressPanel({
         <div>
           <div className="flex items-end justify-between gap-3">
             <h2 className="font-display text-display-base font-bold text-white">
+              {league.n_sessions > 1 && (
+                <>
+                  Session {current.session_number} of {league.n_sessions} ·{" "}
+                </>
+              )}
               Round {current.round_number} of {league.n_rounds}
             </h2>
             {isAdmin && (
@@ -585,9 +594,16 @@ function InProgressPanel({
                 disabled={busy || !allScored}
                 className="rounded-lg bg-pickle px-6 py-3 font-display text-display-xs font-extrabold uppercase tracking-wide text-black transition hover:bg-bright disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {league.current_round >= league.n_rounds
-                  ? "Save & Finish League"
-                  : `Save Round & Generate Round ${league.current_round + 1}`}
+                {(() => {
+                  const atSessionEnd = league.current_round >= league.n_rounds;
+                  const atFinalSession =
+                    league.current_session >= league.n_sessions;
+                  if (atSessionEnd && atFinalSession)
+                    return "Save & Finish League";
+                  if (atSessionEnd)
+                    return `Save & Start Session ${league.current_session + 1}`;
+                  return `Save Round & Generate Round ${league.current_round + 1}`;
+                })()}
               </button>
               <button
                 type="button"
