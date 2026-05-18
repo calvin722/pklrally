@@ -141,7 +141,7 @@ export default function AuthButton() {
               setStartLeagueOpen(true);
             }}
             icon="👥"
-            label="Start a League"
+            label="Start a Ladder League"
           />
           <MenuItem
             href="/leagues/manage"

@@ -9,7 +9,7 @@ interface Props {
 }
 
 /**
- * "How it works" explainer shown when a player taps "Start a League"
+ * "How it works" explainer shown when a player taps "Start a Ladder League"
  * in the global dropdown menu. Walks through the King-of-the-Court
  * format + scoring + byes, then CTAs into the create form.
  */
@@ -109,7 +109,7 @@ export default function StartLeagueModal({ open, onClose }: Props) {
             }}
             className="rounded-lg bg-pickle px-6 py-3 font-display text-display-xs font-extrabold uppercase tracking-wide text-black transition hover:bg-bright"
           >
-            Create a League →
+            Create Ladder League →
           </button>
         </div>
       </div>

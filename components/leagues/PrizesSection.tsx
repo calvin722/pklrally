@@ -5,8 +5,14 @@ import { useEffect } from "react";
 export interface PrizeDraft {
   description: string;
   sponsorName: string;
+  /** Newly-uploaded file. When present, replaces existingPath on save. */
   file: File | null;
+  /** Either a blob URL (from `file`) or the public URL of the existing image. */
   previewUrl: string | null;
+  /** The storage path of an already-saved image, if any. Set by the edit
+   *  form when loading existing prizes. Cleared when user picks a new
+   *  file or removes the image. */
+  existingPath?: string | null;
 }
 
 export const EMPTY_PRIZE: PrizeDraft = {
@@ -14,6 +20,7 @@ export const EMPTY_PRIZE: PrizeDraft = {
   sponsorName: "",
   file: null,
   previewUrl: null,
+  existingPath: null,
 };
 
 interface Props {
@@ -47,10 +54,12 @@ export default function PrizesSection({ prizes, onChange }: Props) {
   }
 
   function handleFile(i: 0 | 1 | 2, file: File | null) {
+    // Only revoke if the previous previewUrl was a blob URL (from a File).
     const prev = prizes[i].previewUrl;
-    if (prev) URL.revokeObjectURL(prev);
+    if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
     const previewUrl = file ? URL.createObjectURL(file) : null;
-    update(i, { file, previewUrl });
+    // Picking a new file (or clearing) supersedes any existing stored image.
+    update(i, { file, previewUrl, existingPath: null });
   }
 
   return (

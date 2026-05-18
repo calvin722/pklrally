@@ -244,7 +244,7 @@ function RecordGamesSlide({
         Start a Ladder League
       </h2>
       <p className="font-display text-display-xs uppercase font-bold tracking-widest text-pickle">
-        King of the Court — over a day or a season
+        King of the Court · single day or weekly season
       </p>
       <p className="text-base text-white/80 leading-relaxed">
         Run your own league. Pick the courts, the rounds, single day or weekly

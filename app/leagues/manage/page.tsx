@@ -74,7 +74,7 @@ export default async function ManageLeaguesPage() {
             href="/leagues/new"
             className="rounded-lg bg-pickle px-5 py-3 font-display text-display-xs font-extrabold uppercase tracking-wide text-black transition hover:bg-bright"
           >
-            + Start a League
+            + Start a Ladder League
           </Link>
         </div>
 

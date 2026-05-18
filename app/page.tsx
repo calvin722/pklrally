@@ -48,7 +48,7 @@ export default function HomePage() {
         </nav>
       </header>
 
-      {/* CTAs — Find Open Play + Start a League above the map */}
+      {/* CTAs — Find Open Play + Start a Ladder League above the map */}
       <div className="z-20 flex justify-center gap-3 px-4 py-4">
         <FindGameButton
           className="flex-1 max-w-xs"
@@ -60,7 +60,7 @@ export default function HomePage() {
           className="flex flex-1 max-w-xs flex-col items-center justify-center rounded-lg border-2 border-pickle bg-pickle px-4 py-3 text-black transition hover:bg-bright"
         >
           <span className="font-display text-display-base font-extrabold uppercase tracking-wide">
-            🏆 Start a League
+            🏆 Start a Ladder League
           </span>
           <span className="text-xs font-semibold">
             run a ladder · win local prizes

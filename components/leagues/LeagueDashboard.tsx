@@ -116,6 +116,7 @@ export default function LeagueDashboard({
         {league.status === "setup" && (
           <SetupPanel
             leagueId={leagueId}
+            leagueName={league.name}
             players={players}
             minPlayers={minPlayers}
             ready={ready}
@@ -198,6 +199,7 @@ function StatusPill({
 // ===================================================================
 function SetupPanel({
   leagueId,
+  leagueName,
   players,
   minPlayers,
   ready,
@@ -208,6 +210,7 @@ function SetupPanel({
   onDelete,
 }: {
   leagueId: string;
+  leagueName: string;
   players: LeagueState["players"];
   minPlayers: number;
   ready: boolean;
@@ -217,8 +220,25 @@ function SetupPanel({
   onStart: () => void;
   onDelete: () => void;
 }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
   return (
     <div className="space-y-8">
+      {isAdmin && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border-2 border-pickle/40 bg-pickle/5 px-4 py-3">
+          <p className="text-sm text-white/80">
+            <strong className="text-pickle">Editable until you start.</strong>{" "}
+            Change the name, date, courts, prizes — anything — up until the
+            Start League button is pressed.
+          </p>
+          <Link
+            href={`/leagues/${leagueId}/edit`}
+            className="rounded-lg border-2 border-pickle px-4 py-2 font-display text-display-xs font-bold uppercase tracking-wide text-pickle transition hover:bg-pickle hover:text-black"
+          >
+            ✎ Edit details
+          </Link>
+        </div>
+      )}
+
       {isAdmin && (
         <AddPlayerForm leagueId={leagueId} onAdded={onAdded} />
       )}
@@ -284,7 +304,7 @@ function SetupPanel({
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={onStart}
+            onClick={() => setConfirmOpen(true)}
             disabled={busy || !ready}
             className="rounded-lg bg-pickle px-6 py-4 font-display text-display-base font-extrabold uppercase tracking-wide text-black transition hover:bg-bright disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -300,6 +320,96 @@ function SetupPanel({
           </button>
         </div>
       )}
+
+      <StartConfirmModal
+        open={confirmOpen}
+        leagueName={leagueName}
+        playerCount={players.length}
+        busy={busy}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          setConfirmOpen(false);
+          onStart();
+        }}
+      />
+    </div>
+  );
+}
+
+// -------- Start confirmation modal --------
+function StartConfirmModal({
+  open,
+  leagueName,
+  playerCount,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  leagueName: string;
+  playerCount: number;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border-2 border-bright bg-black p-6 text-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="font-display text-display-xs uppercase font-bold tracking-wide text-bright">
+          ⚠ Final check
+        </div>
+        <h2 className="mt-1 font-display text-display-xl font-extrabold text-bright">
+          Start {leagueName}?
+        </h2>
+        <div className="mt-4 space-y-3 text-sm leading-relaxed text-white/85">
+          <p>
+            Once you start the league, <strong>no going back</strong>:
+          </p>
+          <ul className="space-y-1.5 pl-5 text-white/80">
+            <li className="list-disc">
+              League details (name, dates, courts, prizes) <strong>lock</strong>
+            </li>
+            <li className="list-disc">
+              Round 1 generates with the {playerCount} players currently on the roster
+            </li>
+            <li className="list-disc">
+              You&rsquo;ll start entering scores after the first round
+            </li>
+          </ul>
+          <p className="text-white/70">
+            Make sure your roster and details are correct — once started, you
+            can&rsquo;t add or remove players from the round assignments.
+          </p>
+        </div>
+
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-lg border-2 border-white/40 px-6 py-3 font-display text-display-xs font-bold uppercase tracking-wide text-white/80 transition hover:border-white hover:text-white disabled:opacity-50"
+          >
+            Cancel — keep editing
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="rounded-lg bg-bright px-6 py-3 font-display text-display-xs font-extrabold uppercase tracking-wide text-black transition hover:bg-pickle disabled:opacity-50"
+          >
+            {busy ? "Starting…" : "Yes, start the league →"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

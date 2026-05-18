@@ -227,6 +227,69 @@ export async function createLeague(input: {
   return data;
 }
 
+/**
+ * Update a league's settings while it's still in 'setup'. After the league
+ * has started, most fields shouldn't change — but RLS still allows the
+ * creator to update, so it's the UI's job to gate this.
+ */
+export async function updateLeague(input: {
+  id: string;
+  name?: string;
+  description?: string | null;
+  scheduledAt?: Date | string | null;
+  courtId?: string | null;
+  manualCourtName?: string | null;
+  manualCourtAddress?: string | null;
+  nCourts?: number;
+  nRounds?: number;
+  nSessions?: number;
+  sessionDates?: Array<Date | string> | null;
+  winBonus?: number;
+  courtRules?: string | null;
+  format?: LeagueFormat;
+  partnerMode?: PartnerMode;
+}): Promise<void> {
+  const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+  if (input.name !== undefined) patch.name = input.name.trim();
+  if (input.description !== undefined)
+    patch.description = input.description?.trim() || null;
+  if (input.scheduledAt !== undefined) {
+    patch.scheduled_at = input.scheduledAt
+      ? typeof input.scheduledAt === "string"
+        ? input.scheduledAt
+        : input.scheduledAt.toISOString()
+      : null;
+  }
+  if (input.courtId !== undefined) patch.court_id = input.courtId;
+  if (input.manualCourtName !== undefined)
+    patch.manual_court_name = input.manualCourtName?.trim() || null;
+  if (input.manualCourtAddress !== undefined)
+    patch.manual_court_address = input.manualCourtAddress?.trim() || null;
+  if (input.nCourts !== undefined) patch.n_courts = input.nCourts;
+  if (input.nRounds !== undefined) patch.n_rounds = input.nRounds;
+  if (input.nSessions !== undefined) patch.n_sessions = input.nSessions;
+  if (input.sessionDates !== undefined) {
+    patch.session_dates = input.sessionDates
+      ? input.sessionDates.map((d) =>
+          typeof d === "string" ? d : d.toISOString(),
+        )
+      : null;
+  }
+  if (input.winBonus !== undefined) patch.win_bonus = input.winBonus;
+  if (input.courtRules !== undefined)
+    patch.court_rules = input.courtRules?.trim() || null;
+  if (input.format !== undefined) patch.format = input.format;
+  if (input.partnerMode !== undefined) patch.partner_mode = input.partnerMode;
+
+  const { error } = await supabase
+    .from("leagues")
+    .update(patch)
+    .eq("id", input.id);
+  if (error) throw new Error(error.message);
+}
+
 /** Upload a sponsor image to the league-prizes bucket and return its public URL + path. */
 export async function uploadPrizeImage(
   leagueId: string,
