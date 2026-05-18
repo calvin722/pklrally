@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPlayer } from "@/lib/supabase/getCurrentPlayer";
+import { formatLeagueDateShort } from "@/lib/leagues";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ interface LeagueRow {
   win_bonus: number;
   n_rounds: number;
   n_sessions: number;
+  timezone: string | null;
 }
 
 interface MatchRow {
@@ -60,7 +62,8 @@ export default async function StatsPage() {
       supabase
         .from("leagues")
         .select(
-          "id, name, status, scheduled_at, win_bonus, n_rounds, n_sessions",
+          `id, name, status, scheduled_at, win_bonus, n_rounds, n_sessions,
+           court:courts (timezone)`,
         )
         .in("id", leagueIds)
         .order("created_at", { ascending: false }),
@@ -76,7 +79,26 @@ export default async function StatsPage() {
         .in("league_id", leagueIds),
     ]);
 
-  const leagues = (leaguesRaw ?? []) as LeagueRow[];
+  // Flatten the court join into a top-level timezone field so the rest
+  // of this file doesn't need to think about embedded shapes.
+  const leagues: LeagueRow[] = (leaguesRaw ?? []).map((l) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const court = Array.isArray((l as any).court)
+      ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (l as any).court[0]
+      : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (l as any).court;
+    return {
+      id: l.id,
+      name: l.name,
+      status: l.status,
+      scheduled_at: l.scheduled_at,
+      win_bonus: l.win_bonus,
+      n_rounds: l.n_rounds,
+      n_sessions: l.n_sessions,
+      timezone: court?.timezone ?? null,
+    };
+  });
   const matches = (matchesRaw ?? []) as MatchRow[];
   const lpAll = allLpRaw ?? [];
 
@@ -221,9 +243,9 @@ export default async function StatsPage() {
                     {l.league.scheduled_at && (
                       <>
                         {" · "}
-                        {new Date(l.league.scheduled_at).toLocaleDateString(
-                          "en-US",
-                          { month: "short", day: "numeric", year: "numeric" },
+                        {formatLeagueDateShort(
+                          l.league.scheduled_at,
+                          l.league.timezone,
                         )}
                       </>
                     )}

@@ -15,6 +15,8 @@ import {
   advanceRound,
   finalizeLeague,
   deleteLeague,
+  formatLeagueDateTime,
+  DEFAULT_LEAGUE_TZ,
 } from "@/lib/leagues";
 import { searchPlayers } from "@/lib/rally";
 import { createClient } from "@/lib/supabase/client";
@@ -823,16 +825,18 @@ function LeagueMeta({
   prizes: LeaguePrize[];
 }) {
   const [courtLabel, setCourtLabel] = useState<string | null>(null);
+  const [courtTz, setCourtTz] = useState<string>(DEFAULT_LEAGUE_TZ);
 
   useEffect(() => {
     if (!league.court_id) {
       setCourtLabel(null);
+      setCourtTz(DEFAULT_LEAGUE_TZ);
       return;
     }
     const supabase = createClient();
     supabase
       .from("courts")
-      .select("name, address, city, state")
+      .select("name, address, city, state, timezone")
       .eq("id", league.court_id)
       .maybeSingle()
       .then(({ data }) => {
@@ -841,17 +845,12 @@ function LeagueMeta({
           .filter(Boolean)
           .join(" · ");
         setCourtLabel(parts);
+        if (data.timezone) setCourtTz(data.timezone);
       });
   }, [league.court_id]);
 
   const dateLabel = league.scheduled_at
-    ? new Date(league.scheduled_at).toLocaleString("en-US", {
-        weekday: "long",
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      })
+    ? formatLeagueDateTime(league.scheduled_at, courtTz)
     : null;
 
   const manual =

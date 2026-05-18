@@ -24,6 +24,61 @@ import { createClient } from "./supabase/client";
 import { createGuest } from "./rally";
 
 // =====================================================================
+// Date formatting
+// =====================================================================
+
+/**
+ * Default timezone used when a league has no associated court (manual
+ * court entry) or the court row has a null timezone. Calvin's home base
+ * is Denver and the seed data lives there, so it's a reasonable fallback.
+ * Anything that does have a court will use the court's own timezone.
+ */
+export const DEFAULT_LEAGUE_TZ = "America/Denver";
+
+/**
+ * Format a league's scheduled_at timestamp in the COURT's local timezone,
+ * so emails and dashboards show "Tuesday, May 18, 6:00 PM MDT" rather
+ * than UTC.
+ */
+export function formatLeagueDateTime(
+  iso: string | null | undefined,
+  timezone: string | null | undefined,
+  opts: { withWeekday?: boolean; withYear?: boolean } = {},
+): string {
+  if (!iso) return "Date TBA";
+  const tz = timezone || DEFAULT_LEAGUE_TZ;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fmt: any = {
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: tz,
+    timeZoneName: "short",
+  };
+  if (opts.withWeekday !== false) fmt.weekday = "long";
+  if (opts.withYear) fmt.year = "numeric";
+  return new Date(iso).toLocaleString("en-US", fmt);
+}
+
+/** Short variant (no weekday, no year) — used on compact cards. */
+export function formatLeagueDateShort(
+  iso: string | null | undefined,
+  timezone: string | null | undefined,
+): string {
+  if (!iso) return "TBA";
+  const tz = timezone || DEFAULT_LEAGUE_TZ;
+  return new Date(iso).toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: tz,
+  });
+}
+
+// =====================================================================
 // Types
 // =====================================================================
 

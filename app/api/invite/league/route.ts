@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { formatLeagueDateTime, DEFAULT_LEAGUE_TZ } from "@/lib/leagues";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://pklrally.com";
@@ -78,18 +79,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invite not found" }, { status: 404 });
   }
 
-  // Optional: court name + address
+  // Optional: court name + address + timezone (for date formatting)
   let courtLabel = "";
   let courtAddress = "";
+  let courtTimezone: string | null = null;
   if (league.court_id) {
     const { data: court } = await supabase
       .from("courts")
-      .select("name, address, city, state")
+      .select("name, address, city, state, timezone")
       .eq("id", league.court_id)
       .maybeSingle();
     if (court) {
       courtLabel = `${court.name} — ${court.city}, ${court.state}`;
       if (court.address) courtAddress = court.address;
+      courtTimezone = court.timezone ?? null;
     }
   } else if (league.manual_court_name || league.manual_court_address) {
     courtLabel = league.manual_court_name ?? "";
@@ -103,16 +106,10 @@ export async function POST(request: Request) {
     .eq("league_id", leagueId)
     .order("place", { ascending: true });
 
-  const dateLabel = league.scheduled_at
-    ? new Date(league.scheduled_at).toLocaleString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        timeZoneName: "short",
-      })
-    : "Date TBA";
+  // Use the court's timezone for all dates so the email reads in local
+  // time — otherwise the Vercel UTC clock leaks through.
+  const tz = courtTimezone || DEFAULT_LEAGUE_TZ;
+  const dateLabel = formatLeagueDateTime(league.scheduled_at, tz);
 
   const acceptUrl = `${SITE_URL}/leagues/${leagueId}/rsvp/${invite.invite_token}?action=accept`;
   const declineUrl = `${SITE_URL}/leagues/${leagueId}/rsvp/${invite.invite_token}?action=decline`;

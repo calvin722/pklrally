@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPlayer } from "@/lib/supabase/getCurrentPlayer";
+import { formatLeagueDateShort } from "@/lib/leagues";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,8 @@ export default async function ManageLeaguesPage() {
   const { data: leagues } = await supabase
     .from("leagues")
     .select(
-      "id, name, status, current_round, n_rounds, scheduled_at, description",
+      `id, name, status, current_round, n_rounds, scheduled_at, description,
+       court:courts (timezone)`,
     )
     .eq("created_by", me.id)
     .order("created_at", { ascending: false })
@@ -93,14 +95,13 @@ export default async function ManageLeaguesPage() {
               accepted: 0,
               declined: 0,
             };
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const j = (v: any) => (Array.isArray(v) ? v[0] : v);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const court = j((l as any).court);
+            const tz: string | null = court?.timezone ?? null;
             const dateLabel = l.scheduled_at
-              ? new Date(l.scheduled_at).toLocaleString("en-US", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })
+              ? formatLeagueDateShort(l.scheduled_at, tz)
               : null;
             return (
               <Link

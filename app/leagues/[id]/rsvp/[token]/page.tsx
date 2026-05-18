@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import RsvpClient from "@/components/leagues/RsvpClient";
+import { formatLeagueDateTime, DEFAULT_LEAGUE_TZ } from "@/lib/leagues";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function RsvpPage({ params, searchParams }: PageProps) {
   const { data: league } = await supabase
     .from("leagues")
     .select(
-      "id, name, description, scheduled_at, court_id, manual_court_name, manual_court_address, court_rules",
+      "id, name, description, scheduled_at, court_id, manual_court_name, manual_court_address, court_rules, session_dates, n_sessions",
     )
     .eq("id", id)
     .maybeSingle();
@@ -27,15 +28,17 @@ export default async function RsvpPage({ params, searchParams }: PageProps) {
   // Look up court details (public)
   let courtLabel: string | null = null;
   let courtAddress: string | null = null;
+  let courtTimezone: string = DEFAULT_LEAGUE_TZ;
   if (league.court_id) {
     const { data: court } = await supabase
       .from("courts")
-      .select("name, address, city, state")
+      .select("name, address, city, state, timezone")
       .eq("id", league.court_id)
       .maybeSingle();
     if (court) {
       courtLabel = `${court.name} — ${court.city}, ${court.state}`;
       courtAddress = court.address ?? null;
+      if (court.timezone) courtTimezone = court.timezone;
     }
   } else if (league.manual_court_name || league.manual_court_address) {
     courtLabel = league.manual_court_name;
@@ -60,16 +63,15 @@ export default async function RsvpPage({ params, searchParams }: PageProps) {
     return { ...p, sponsor_image_url: publicUrl };
   });
 
-  const dateLabel = league.scheduled_at
-    ? new Date(league.scheduled_at).toLocaleString("en-US", {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        timeZoneName: "short",
-      })
-    : "Date TBA";
+  const dateLabel = formatLeagueDateTime(league.scheduled_at, courtTimezone);
+
+  // For multi-session leagues, render all dates in the court's local TZ.
+  const allSessionLabels: string[] =
+    league.n_sessions > 1 && Array.isArray(league.session_dates)
+      ? league.session_dates.map((d: string) =>
+          formatLeagueDateTime(d, courtTimezone),
+        )
+      : [];
 
   return (
     <div className="min-h-svh bg-black px-4 py-8 text-white">
@@ -89,9 +91,21 @@ export default async function RsvpPage({ params, searchParams }: PageProps) {
           )}
 
           <div className="mt-5 space-y-1 text-sm">
-            <div className="text-white">
-              <span className="text-pickle">📅</span> {dateLabel}
-            </div>
+            {allSessionLabels.length > 0 ? (
+              <div className="text-white">
+                <span className="text-pickle">📅</span>{" "}
+                <strong>{allSessionLabels.length} sessions:</strong>
+                <ul className="mt-1 ml-5 list-disc space-y-0.5">
+                  {allSessionLabels.map((label, i) => (
+                    <li key={i} className="text-white/85">{label}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="text-white">
+                <span className="text-pickle">📅</span> {dateLabel}
+              </div>
+            )}
             {courtLabel && (
               <div className="text-white/80">
                 <span className="text-pickle">📍</span> {courtLabel}
