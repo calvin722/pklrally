@@ -427,23 +427,126 @@ export async function createInvite(input: {
   email: string;
   phone?: string;
   invitedBy: string;
+  /** Optional: link this invite to an already-existing player. When set,
+   *  the RSVP flow re-uses this player_id instead of creating a guest. */
+  playerId?: string;
 }): Promise<{ id: string; token: string }> {
   const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const row: Record<string, any> = {
+    league_id: input.leagueId,
+    email: input.email.trim().toLowerCase(),
+    phone: input.phone?.trim() || null,
+    invited_by: input.invitedBy,
+  };
+  if (input.playerId) row.player_id = input.playerId;
   const { data, error } = await supabase
     .from("league_invites")
-    .upsert(
-      {
-        league_id: input.leagueId,
-        email: input.email.trim().toLowerCase(),
-        phone: input.phone?.trim() || null,
-        invited_by: input.invitedBy,
-      },
-      { onConflict: "league_id,email", ignoreDuplicates: false },
-    )
+    .upsert(row, { onConflict: "league_id,email", ignoreDuplicates: false })
     .select("id, invite_token")
     .single();
   if (error) throw new Error(error.message);
   return { id: data.id, token: data.invite_token };
+}
+
+/**
+ * Add a player to a league, routing through the email invite flow when
+ * a valid email is available so the recipient can accept or decline
+ * before they end up on the roster. Falls back to a direct add when
+ * no email is available (phone-only or no-contact guests).
+ *
+ * Used by the AddPlayerForm on the league dashboard for both the
+ * typeahead "add existing member" and the "add new guest" paths.
+ */
+export async function addOrInvitePlayer(input: {
+  leagueId: string;
+  invitedBy: string;
+  /** Existing player path. */
+  playerId?: string;
+  /** New-guest path. */
+  displayName?: string;
+  email?: string;
+  phone?: string;
+}): Promise<{
+  playerId: string;
+  /** Address an invite email was sent to, or null if no email path. */
+  emailedTo: string | null;
+  /** SMS claim URL for phone-only guests, or null otherwise. */
+  claimUrl: string | null;
+}> {
+  const supabase = createClient();
+
+  let playerId = input.playerId;
+  let email = input.email?.trim().toLowerCase();
+  let phone = input.phone?.trim();
+  let inviteToken: string | null = null;
+
+  if (!playerId) {
+    // New-guest path: create the player row first.
+    if (!input.displayName?.trim()) {
+      throw new Error("Display name required for new player");
+    }
+    const guest = await createGuest(
+      input.displayName,
+      email,
+      phone,
+    );
+    playerId = guest.id;
+    email = guest.email?.toLowerCase() ?? email;
+    phone = guest.phone ?? phone;
+    inviteToken = guest.invite_token ?? null;
+  } else if (!email) {
+    // Existing player path with no email passed in — look it up.
+    const { data } = await supabase
+      .from("players")
+      .select("email")
+      .eq("id", playerId)
+      .maybeSingle();
+    email = data?.email?.toLowerCase() ?? undefined;
+  }
+
+  const validEmail =
+    !!email &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
+    !email.includes("__seed__");
+
+  if (validEmail) {
+    // Email path — create invite + fire the RSVP email. Player is NOT
+    // added to league_players yet; they need to accept first.
+    const inv = await createInvite({
+      leagueId: input.leagueId,
+      email: email as string,
+      phone,
+      invitedBy: input.invitedBy,
+      playerId,
+    });
+    try {
+      await sendInviteEmail({ leagueId: input.leagueId, inviteId: inv.id });
+    } catch (e) {
+      // Don't throw — the invite row exists; admin can resend from the
+      // Invites panel.
+      console.error("addOrInvitePlayer: invite email failed:", e);
+    }
+    return { playerId, emailedTo: email as string, claimUrl: null };
+  }
+
+  // No-email path — direct add to the roster.
+  const { error } = await supabase
+    .from("league_players")
+    .upsert(
+      { league_id: input.leagueId, player_id: playerId },
+      { onConflict: "league_id,player_id", ignoreDuplicates: true },
+    );
+  if (error && !/duplicate/i.test(error.message)) {
+    throw new Error(error.message);
+  }
+
+  const siteUrl =
+    typeof window !== "undefined" && window.location.origin
+      ? window.location.origin
+      : "https://pklrally.com";
+  const claimUrl = inviteToken ? `${siteUrl}/c/${inviteToken}` : null;
+  return { playerId, emailedTo: null, claimUrl };
 }
 
 export async function fetchInvites(leagueId: string): Promise<LeagueInvite[]> {

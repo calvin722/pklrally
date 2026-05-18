@@ -9,7 +9,7 @@ import {
   type LeaguePrize,
   type Standing,
   fetchLeagueState,
-  addLeaguePlayer,
+  addOrInvitePlayer,
   removeLeaguePlayer,
   generateRound1,
   advanceRound,
@@ -120,6 +120,7 @@ export default function LeagueDashboard({
           <SetupPanel
             leagueId={leagueId}
             leagueName={league.name}
+            currentPlayerId={currentPlayerId}
             players={players}
             minPlayers={minPlayers}
             ready={ready}
@@ -205,6 +206,7 @@ function StatusPill({
 function SetupPanel({
   leagueId,
   leagueName,
+  currentPlayerId,
   players,
   minPlayers,
   ready,
@@ -216,6 +218,7 @@ function SetupPanel({
 }: {
   leagueId: string;
   leagueName: string;
+  currentPlayerId: string | null;
   players: LeagueState["players"];
   minPlayers: number;
   ready: boolean;
@@ -244,8 +247,12 @@ function SetupPanel({
         </div>
       )}
 
-      {isAdmin && (
-        <AddPlayerForm leagueId={leagueId} onAdded={onAdded} />
+      {isAdmin && currentPlayerId && (
+        <AddPlayerForm
+          leagueId={leagueId}
+          invitedBy={currentPlayerId}
+          onAdded={onAdded}
+        />
       )}
 
       <div>
@@ -453,17 +460,22 @@ function RemoveButton({
 // ---- Add player form (typeahead + add-by-contact) ----
 function AddPlayerForm({
   leagueId,
+  invitedBy,
   onAdded,
 }: {
   leagueId: string;
+  invitedBy: string;
   onAdded: () => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [results, setResults] = useState<Array<{ id: string; display_name: string }>>([]);
+  const [results, setResults] = useState<
+    Array<{ id: string; display_name: string; email: string | null }>
+  >([]);
   const [adding, setAdding] = useState(false);
   const [lastClaimUrl, setLastClaimUrl] = useState<string | null>(null);
+  const [lastNote, setLastNote] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -486,11 +498,20 @@ function AddPlayerForm({
   async function addExisting(playerId: string, displayName: string) {
     setAdding(true);
     setErrorMsg(null);
+    setLastClaimUrl(null);
+    setLastNote(null);
     try {
-      await addLeaguePlayer({ leagueId, playerId });
+      const res = await addOrInvitePlayer({ leagueId, invitedBy, playerId });
       setQuery("");
       setResults([]);
-      setLastClaimUrl(null);
+      setLastClaimUrl(res.claimUrl);
+      if (res.emailedTo) {
+        setLastNote(`✓ Invite emailed to ${res.emailedTo} — pending their reply.`);
+      } else {
+        setLastNote(
+          `✓ ${displayName} added directly (no email on file). They won't get a notification.`,
+        );
+      }
       await onAdded();
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : `Could not add ${displayName}`);
@@ -504,9 +525,12 @@ function AddPlayerForm({
     if (!name) return;
     setAdding(true);
     setErrorMsg(null);
+    setLastClaimUrl(null);
+    setLastNote(null);
     try {
-      const res = await addLeaguePlayer({
+      const res = await addOrInvitePlayer({
         leagueId,
+        invitedBy,
         displayName: name,
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
@@ -516,6 +540,13 @@ function AddPlayerForm({
       setPhone("");
       setResults([]);
       setLastClaimUrl(res.claimUrl);
+      if (res.emailedTo) {
+        setLastNote(`✓ Invite emailed to ${res.emailedTo} — pending their reply.`);
+      } else if (res.claimUrl) {
+        setLastNote(`✓ ${name} added. Text them the claim link below.`);
+      } else {
+        setLastNote(`✓ ${name} added directly (no contact info).`);
+      }
       await onAdded();
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Could not add player");
@@ -530,9 +561,9 @@ function AddPlayerForm({
         Add player
       </h3>
       <p className="mt-1 text-xs text-white/60">
-        Type a name. If they&rsquo;re already a member, pick them. Otherwise add
-        them as a guest (with an optional phone or email so they can claim
-        their stats later).
+        Type a name. Players with an email on file get an invite email
+        with accept / decline buttons — they appear on the roster after
+        they accept. No email → added directly.
       </p>
 
       <input
@@ -552,10 +583,12 @@ function AddPlayerForm({
                 type="button"
                 onClick={() => addExisting(r.id, r.display_name)}
                 disabled={adding}
-                className="block w-full px-4 py-2 text-left text-sm text-white hover:bg-pickle/10"
+                className="flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm text-white hover:bg-pickle/10"
               >
-                {r.display_name}{" "}
-                <span className="text-xs text-white/40">— add to league</span>
+                <span>{r.display_name}</span>
+                <span className="text-xs text-white/40">
+                  {r.email ? "→ invite email" : "→ direct add"}
+                </span>
               </button>
             </li>
           ))}
@@ -594,9 +627,13 @@ function AddPlayerForm({
         </div>
       )}
 
+      {lastNote && (
+        <p className="mt-3 text-xs text-pickle">{lastNote}</p>
+      )}
+
       {lastClaimUrl && (
         <div className="mt-3 rounded-lg border-2 border-bright bg-bright/10 px-3 py-2 text-xs text-white">
-          <div className="font-bold text-bright">✓ Added · claim link:</div>
+          <div className="font-bold text-bright">Claim link (text this to them):</div>
           <a
             href={lastClaimUrl}
             target="_blank"
@@ -606,7 +643,7 @@ function AddPlayerForm({
             {lastClaimUrl}
           </a>
           <div className="mt-1 text-white/60">
-            Text this to them so they can claim their stats after the league.
+            Lets them claim their stats after the league.
           </div>
         </div>
       )}
