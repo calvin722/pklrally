@@ -498,6 +498,30 @@ export async function sendInviteEmail(input: {
 }
 
 /**
+ * Send the "league complete" email to every player who has an email
+ * address on file. Includes their final rank, points, W-L, prize (if
+ * top 3), and links to /stats and the league results page.
+ *
+ * Fired automatically when a league transitions to status='finished'
+ * via advanceRound or finalizeLeague. Can also be triggered manually
+ * from the admin "Resend results email" button on the finished panel.
+ */
+export async function sendLeagueCompletionEmails(
+  leagueId: string,
+): Promise<{ sent: number; failed: number; total: number }> {
+  const res = await fetch("/api/invite/league-complete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ leagueId }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Completion emails failed: ${body}`);
+  }
+  return res.json();
+}
+
+/**
  * Add a single player to a league. If `playerId` is given, uses the existing
  * member. Otherwise creates a guest with the provided name/email/phone (and
  * returns a claim URL if a phone was supplied so the admin can text it).
@@ -908,6 +932,11 @@ export async function advanceRound(leagueId: string): Promise<void> {
         updated_at: new Date().toISOString(),
       })
       .eq("id", leagueId);
+    // Fire-and-forget the completion emails so a transient email
+    // failure doesn't block the UI advancing to "finished".
+    sendLeagueCompletionEmails(leagueId).catch((e) =>
+      console.error("completion emails failed:", e),
+    );
     return;
   }
 
@@ -1007,6 +1036,10 @@ export async function finalizeLeague(leagueId: string): Promise<void> {
     })
     .eq("id", leagueId);
   if (error) throw new Error(error.message);
+  // Same fire-and-forget completion emails as advanceRound's natural end.
+  sendLeagueCompletionEmails(leagueId).catch((e) =>
+    console.error("completion emails failed:", e),
+  );
 }
 
 export async function deleteLeague(leagueId: string): Promise<void> {

@@ -17,6 +17,7 @@ import {
   deleteLeague,
   formatLeagueDateTime,
   DEFAULT_LEAGUE_TZ,
+  sendLeagueCompletionEmails,
 } from "@/lib/leagues";
 import { searchPlayers } from "@/lib/rally";
 import { createClient } from "@/lib/supabase/client";
@@ -156,11 +157,13 @@ export default function LeagueDashboard({
 
         {league.status === "finished" && (
           <FinishedPanel
+            leagueId={leagueId}
             standings={standings}
             rounds={rounds}
             matches={matches}
             players={players}
             prizes={prizes}
+            isAdmin={isAdmin}
           />
         )}
       </div>
@@ -779,32 +782,86 @@ function CourtPreviewCard({
 // FINISHED
 // ===================================================================
 function FinishedPanel({
+  leagueId,
   standings,
   prizes,
+  isAdmin,
 }: {
+  leagueId: string;
   standings: Standing[];
   rounds: LeagueRound[];
   matches: LeagueMatch[];
   players: LeagueState["players"];
   prizes: LeaguePrize[];
+  isAdmin: boolean;
 }) {
+  const [resending, setResending] = useState(false);
+  const [resendNote, setResendNote] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<string | null>(null);
+
+  async function handleResend() {
+    setResending(true);
+    setResendNote(null);
+    setResendError(null);
+    try {
+      const res = await sendLeagueCompletionEmails(leagueId);
+      setResendNote(
+        `✓ Sent to ${res.sent} player${res.sent === 1 ? "" : "s"}${
+          res.failed > 0 ? ` (${res.failed} failed)` : ""
+        }.`,
+      );
+    } catch (e) {
+      setResendError(
+        e instanceof Error ? e.message : "Could not send results email",
+      );
+    } finally {
+      setResending(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border-2 border-bright bg-bright/5 px-6 py-5">
-        <div className="font-display text-display-xs uppercase font-bold tracking-wide text-bright">
-          League Complete 🏆
-        </div>
-        <div className="mt-1 text-white">
-          {standings[0] ? (
-            <>
-              <span className="font-display text-display-lg font-extrabold text-pickle">
-                {standings[0].display_name}
-              </span>{" "}
-              wins the league with{" "}
-              <span className="font-bold">{standings[0].total_points} points</span>.
-            </>
-          ) : (
-            <>No standings available.</>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="font-display text-display-xs uppercase font-bold tracking-wide text-bright">
+              League Complete 🏆
+            </div>
+            <div className="mt-1 text-white">
+              {standings[0] ? (
+                <>
+                  <span className="font-display text-display-lg font-extrabold text-pickle">
+                    {standings[0].display_name}
+                  </span>{" "}
+                  wins the league with{" "}
+                  <span className="font-bold">
+                    {standings[0].total_points} points
+                  </span>
+                  .
+                </>
+              ) : (
+                <>No standings available.</>
+              )}
+            </div>
+          </div>
+
+          {isAdmin && (
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resending}
+                className="rounded-lg border-2 border-pickle px-4 py-2 font-display text-display-xs font-bold uppercase tracking-wide text-pickle transition hover:bg-pickle hover:text-black disabled:opacity-50"
+              >
+                {resending ? "Sending…" : "📧 Resend results email"}
+              </button>
+              {resendNote && (
+                <p className="mt-1 text-xs text-pickle">{resendNote}</p>
+              )}
+              {resendError && (
+                <p className="mt-1 text-xs text-bright">⚠ {resendError}</p>
+              )}
+            </div>
           )}
         </div>
       </div>
