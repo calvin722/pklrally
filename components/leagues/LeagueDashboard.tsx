@@ -22,6 +22,7 @@ import {
 import { searchPlayers } from "@/lib/rally";
 import { createClient } from "@/lib/supabase/client";
 import InvitePanel from "./InvitePanel";
+import PastRoundsPanel from "./PastRoundsPanel";
 
 interface Props {
   leagueId: string;
@@ -86,14 +87,25 @@ export default function LeagueDashboard({
             +{league.win_bonus} win bonus
             {league.court_rules ? ` · "${league.court_rules}"` : ""}
           </p>
-          {league.status !== "setup" && (
-            <Link
-              href={`/leagues/${league.id}/stats`}
-              className="mt-2 inline-flex items-center gap-1 text-xs text-pickle hover:underline"
-            >
-              📊 View per-player charts →
-            </Link>
-          )}
+          <div className="mt-2 flex flex-wrap gap-3 text-xs">
+            {league.status !== "setup" && (
+              <Link
+                href={`/leagues/${league.id}/stats`}
+                className="inline-flex items-center gap-1 text-pickle hover:underline"
+              >
+                📊 Per-player charts →
+              </Link>
+            )}
+            {players.length > 0 && (
+              <Link
+                href={`/leagues/${league.id}/print`}
+                target="_blank"
+                className="inline-flex items-center gap-1 text-pickle hover:underline"
+              >
+                📄 Print scorecards →
+              </Link>
+            )}
+          </div>
         </div>
         <StatusPill status={league.status} round={league.current_round} total={league.n_rounds} />
       </div>
@@ -149,6 +161,7 @@ export default function LeagueDashboard({
             isAdmin={isAdmin}
             busy={busy}
             onAdvance={() => run(() => advanceRound(leagueId))}
+            onChanged={refresh}
             onFinalize={() => {
               if (confirm("End the league now? This finalizes standings."))
                 run(() => finalizeLeague(leagueId));
@@ -159,12 +172,14 @@ export default function LeagueDashboard({
         {league.status === "finished" && (
           <FinishedPanel
             leagueId={leagueId}
+            league={league}
             standings={standings}
             rounds={rounds}
             matches={matches}
             players={players}
             prizes={prizes}
             isAdmin={isAdmin}
+            onChanged={refresh}
           />
         )}
       </div>
@@ -668,6 +683,7 @@ function InProgressPanel({
   isAdmin,
   busy,
   onAdvance,
+  onChanged,
   onFinalize,
 }: {
   league: LeagueState["league"];
@@ -679,6 +695,7 @@ function InProgressPanel({
   isAdmin: boolean;
   busy: boolean;
   onAdvance: () => void;
+  onChanged: () => Promise<void>;
   onFinalize: () => void;
 }) {
   const current = rounds.find(
@@ -772,6 +789,15 @@ function InProgressPanel({
 
       {prizes.length > 0 && <PrizeShowcase prizes={prizes} compact />}
       <StandingsTable standings={standings} />
+      <PastRoundsPanel
+        rounds={rounds}
+        matches={matches}
+        players={players}
+        currentSession={league.current_session}
+        currentRound={league.current_round}
+        isAdmin={isAdmin}
+        onChanged={onChanged}
+      />
     </div>
   );
 }
@@ -820,17 +846,24 @@ function CourtPreviewCard({
 // ===================================================================
 function FinishedPanel({
   leagueId,
+  league,
   standings,
   prizes,
+  rounds,
+  matches,
+  players,
   isAdmin,
+  onChanged,
 }: {
   leagueId: string;
+  league: LeagueState["league"];
   standings: Standing[];
   rounds: LeagueRound[];
   matches: LeagueMatch[];
   players: LeagueState["players"];
   prizes: LeaguePrize[];
   isAdmin: boolean;
+  onChanged: () => Promise<void>;
 }) {
   const [resending, setResending] = useState(false);
   const [resendNote, setResendNote] = useState<string | null>(null);
@@ -904,6 +937,16 @@ function FinishedPanel({
       </div>
       {prizes.length > 0 && <PrizeShowcase prizes={prizes} winners={standings} />}
       <StandingsTable standings={standings} highlightTop3 />
+      <PastRoundsPanel
+        rounds={rounds}
+        matches={matches}
+        players={players}
+        currentSession={league.current_session}
+        currentRound={league.current_round}
+        isAdmin={isAdmin}
+        includeCurrent
+        onChanged={onChanged}
+      />
     </div>
   );
 }

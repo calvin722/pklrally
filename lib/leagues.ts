@@ -181,6 +181,8 @@ export interface LeagueMatch {
   winner: "a" | "b" | null;
   created_at: string;
   scored_at: string | null;
+  last_edited_by: string | null;
+  last_edited_at: string | null;
 }
 
 export interface Standing {
@@ -963,6 +965,9 @@ export async function generateRound1(leagueId: string): Promise<void> {
 
 /**
  * Save the score for one court's match. Sets winner column based on scores.
+ * If the match already had scores (i.e. this is an edit, not a first save)
+ * an audit row is written to league_match_edits with the old + new values
+ * and the last_edited_by / last_edited_at stamps are updated.
  */
 export async function saveMatchScore(
   matchId: string,
@@ -976,16 +981,98 @@ export async function saveMatchScore(
     throw new Error("Scores must be non-negative");
   }
   const supabase = createClient();
+
+  // Resolve the current player (for audit stamping). Best-effort —
+  // failing to find a player isn't fatal; we just skip the audit row.
+  let editorPlayerId: string | null = null;
+  try {
+    const { data: auth } = await supabase.auth.getUser();
+    if (auth?.user) {
+      const { data: row } = await supabase
+        .from("players")
+        .select("id")
+        .eq("auth_user_id", auth.user.id)
+        .maybeSingle();
+      editorPlayerId = row?.id ?? null;
+    }
+  } catch {
+    // ignore — we'll save the score without an editor stamp
+  }
+
+  // Read current match to compare and to grab league_id for the audit row
+  const { data: existing } = await supabase
+    .from("league_matches")
+    .select("league_id, team_a_score, team_b_score")
+    .eq("id", matchId)
+    .maybeSingle();
+
+  const isEdit =
+    existing &&
+    existing.team_a_score !== null &&
+    existing.team_b_score !== null &&
+    (existing.team_a_score !== scoreA || existing.team_b_score !== scoreB);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const patch: Record<string, any> = {
+    team_a_score: scoreA,
+    team_b_score: scoreB,
+    winner: scoreA > scoreB ? "a" : "b",
+    scored_at: new Date().toISOString(),
+  };
+  if (isEdit) {
+    patch.last_edited_by = editorPlayerId;
+    patch.last_edited_at = new Date().toISOString();
+  }
+
   const { error } = await supabase
     .from("league_matches")
-    .update({
-      team_a_score: scoreA,
-      team_b_score: scoreB,
-      winner: scoreA > scoreB ? "a" : "b",
-      scored_at: new Date().toISOString(),
-    })
+    .update(patch)
     .eq("id", matchId);
   if (error) throw new Error(error.message);
+
+  // Audit log — best-effort, don't fail the save if the log insert errors
+  if (isEdit && existing?.league_id) {
+    await supabase
+      .from("league_match_edits")
+      .insert({
+        match_id: matchId,
+        league_id: existing.league_id,
+        edited_by: editorPlayerId,
+        old_team_a_score: existing.team_a_score,
+        old_team_b_score: existing.team_b_score,
+        new_team_a_score: scoreA,
+        new_team_b_score: scoreB,
+      })
+      .then(({ error: e }) => {
+        if (e) console.warn("edit-log insert failed:", e.message);
+      });
+  }
+}
+
+export interface MatchEdit {
+  id: string;
+  match_id: string;
+  edited_by: string | null;
+  old_team_a_score: number | null;
+  old_team_b_score: number | null;
+  new_team_a_score: number | null;
+  new_team_b_score: number | null;
+  edited_at: string;
+}
+
+/** Fetch the audit log of edits for a given match (most recent first). */
+export async function fetchMatchEdits(matchId: string): Promise<MatchEdit[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("league_match_edits")
+    .select("*")
+    .eq("match_id", matchId)
+    .order("edited_at", { ascending: false });
+  if (error) {
+    console.error("fetchMatchEdits failed:", error);
+    return [];
+  }
+  return (data ?? []) as MatchEdit[];
 }
 
 /**
