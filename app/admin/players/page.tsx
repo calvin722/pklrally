@@ -148,6 +148,9 @@ export default async function AdminPlayersPage({ searchParams }: PageProps) {
                     isAdmin={p.is_admin}
                     isYou={me?.id === p.id}
                     alreadyDeleted={p.deleted_at !== null}
+                    isGuest={p.is_guest}
+                    email={p.email}
+                    claimedAt={p.claimed_at}
                   />
                 </Td>
               </tr>
