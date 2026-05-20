@@ -565,6 +565,48 @@ export async function fetchInvites(leagueId: string): Promise<LeagueInvite[]> {
   return (data ?? []) as LeagueInvite[];
 }
 
+/**
+ * Remove an invitee from a league — drops both the invite row and (if the
+ * invite was tied to a real player) the corresponding league_players row,
+ * so they disappear from the roster entirely.
+ *
+ * Historical matches are NOT touched: league_matches.team_*_p* references
+ * players(id) directly, so prior rounds still render correctly. The removed
+ * player just won't be paired into any future rounds and won't appear in
+ * the active roster or invite list.
+ *
+ * RLS allows the league creator + admins (see migrations 0030, 0031).
+ */
+export async function removeInvitee(input: {
+  leagueId: string;
+  inviteId: string;
+  /** Optional — if the invite was linked to a real player, that player_id
+   *  also needs to be pulled from league_players. */
+  playerId?: string | null;
+}): Promise<void> {
+  const supabase = createClient();
+
+  // Drop the invite row first
+  const { error: invErr } = await supabase
+    .from("league_invites")
+    .delete()
+    .eq("id", input.inviteId);
+  if (invErr) throw new Error(invErr.message);
+
+  // If we know which player this invite belonged to, drop them from the
+  // roster too. Best-effort: ignore not-found errors.
+  if (input.playerId) {
+    const { error: lpErr } = await supabase
+      .from("league_players")
+      .delete()
+      .eq("league_id", input.leagueId)
+      .eq("player_id", input.playerId);
+    if (lpErr && !/no rows/i.test(lpErr.message)) {
+      throw new Error(lpErr.message);
+    }
+  }
+}
+
 /** Public RSVP — calls the SECURITY DEFINER RPC, no auth required. */
 export async function respondToInvite(input: {
   token: string;

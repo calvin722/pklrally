@@ -5,6 +5,7 @@ import {
   type LeagueInvite,
   createInvite,
   fetchInvites,
+  removeInvitee,
   sendInviteEmail,
 } from "@/lib/leagues";
 
@@ -23,6 +24,9 @@ export default function InvitePanel({ leagueId, invitedBy }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastNote, setLastNote] = useState<string | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<LeagueInvite | null>(
+    null,
+  );
 
   const refresh = useCallback(async () => {
     const list = await fetchInvites(leagueId);
@@ -70,6 +74,28 @@ export default function InvitePanel({ leagueId, invitedBy }: Props) {
       setLastNote(`✓ Re-sent to ${inv.email}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Resend failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmRemove() {
+    if (!pendingRemoval) return;
+    const inv = pendingRemoval;
+    setBusy(true);
+    setError(null);
+    setLastNote(null);
+    try {
+      await removeInvitee({
+        leagueId,
+        inviteId: inv.id,
+        playerId: inv.player_id ?? null,
+      });
+      setLastNote(`✓ Removed ${inv.email}`);
+      setPendingRemoval(null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove");
     } finally {
       setBusy(false);
     }
@@ -132,6 +158,15 @@ export default function InvitePanel({ leagueId, invitedBy }: Props) {
       )}
       {error && <p className="mt-2 text-xs text-bright">⚠ {error}</p>}
 
+      {pendingRemoval && (
+        <RemoveConfirmModal
+          invite={pendingRemoval}
+          busy={busy}
+          onCancel={() => setPendingRemoval(null)}
+          onConfirm={confirmRemove}
+        />
+      )}
+
       {invites.length > 0 && (
         <div className="mt-5 overflow-hidden rounded-xl border-2 border-pickle/30">
           <table className="w-full border-collapse text-sm">
@@ -167,16 +202,27 @@ export default function InvitePanel({ leagueId, invitedBy }: Props) {
                     </span>
                   </Td>
                   <Td>
-                    {inv.status === "pending" && (
+                    <div className="flex items-center gap-3">
+                      {inv.status === "pending" && (
+                        <button
+                          type="button"
+                          onClick={() => resend(inv)}
+                          disabled={busy}
+                          className="text-xs text-pickle hover:underline disabled:opacity-50"
+                        >
+                          resend
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => resend(inv)}
+                        onClick={() => setPendingRemoval(inv)}
                         disabled={busy}
-                        className="text-xs text-pickle hover:underline"
+                        className="text-xs text-bright hover:underline disabled:opacity-50"
+                        title="Remove from league"
                       >
-                        resend
+                        remove
                       </button>
-                    )}
+                    </div>
                   </Td>
                 </tr>
               ))}
@@ -235,6 +281,64 @@ function Th({ children }: { children: React.ReactNode }) {
 function Td({ children }: { children: React.ReactNode }) {
   return <td className="px-3 py-2 align-top">{children}</td>;
 }
+function RemoveConfirmModal({
+  invite,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  invite: LeagueInvite;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const statusLabel =
+    invite.status === "accepted"
+      ? "joining"
+      : invite.status === "declined"
+        ? "declined"
+        : "pending";
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+      <div className="w-full max-w-md rounded-2xl border-2 border-bright bg-black p-6">
+        <h4 className="font-display text-display-base font-extrabold uppercase tracking-wide text-bright">
+          Remove invitee?
+        </h4>
+        <p className="mt-3 text-sm text-white/80">
+          This will permanently remove{" "}
+          <span className="font-mono text-white">{invite.email}</span>{" "}
+          (currently <span className="text-white/60">{statusLabel}</span>) from
+          this league. They&rsquo;ll disappear from the invite list and roster.
+        </p>
+        {invite.status === "accepted" && (
+          <p className="mt-3 rounded-lg border-2 border-bright/40 bg-bright/5 px-3 py-2 text-xs text-bright">
+            ⚠ They&rsquo;ve already accepted. Any prior round scores stay
+            intact, but they won&rsquo;t be paired into future rounds.
+          </p>
+        )}
+        <div className="mt-5 flex gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="flex-1 rounded-lg border-2 border-white/20 px-4 py-2 font-display text-display-xs font-bold uppercase tracking-wide text-white/80 hover:border-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="flex-1 rounded-lg bg-bright px-4 py-2 font-display text-display-xs font-bold uppercase tracking-wide text-black hover:bg-bright/90 disabled:opacity-50"
+          >
+            {busy ? "Removing…" : "Remove"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
