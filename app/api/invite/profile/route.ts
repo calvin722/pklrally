@@ -112,7 +112,7 @@ export async function POST(request: Request) {
   }
 
   const claimUrl = `${SITE_URL}/c/${token}?next=${encodeURIComponent("/welcome")}`;
-  const subject = `Claim your PKLRALLY profile, ${player.display_name}`;
+  const subject = `Create your PKLRALLY account, ${player.display_name}`;
 
   const html = `
 <div style="font-family:Inter,system-ui,sans-serif;background:#000;color:#fff;padding:32px 16px;">
@@ -120,36 +120,43 @@ export async function POST(request: Request) {
     <h1 style="font-family:Manrope,system-ui,sans-serif;font-weight:800;font-size:32px;letter-spacing:-0.02em;color:#99FF00;margin:0 0 4px;">PKL<span style="color:#FFFF00;">RALLY</span></h1>
     <p style="margin:0 0 24px;color:rgba(255,255,255,0.6);font-size:14px;">play, track &amp; win</p>
 
-    <h2 style="font-family:Manrope,system-ui,sans-serif;font-weight:800;font-size:24px;color:#FFFF00;margin:0 0 12px;">Claim your profile</h2>
+    <h2 style="font-family:Manrope,system-ui,sans-serif;font-weight:800;font-size:24px;color:#FFFF00;margin:0 0 12px;">Create your account</h2>
 
     <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">
       Hi ${escapeHtml(player.display_name)} 👋
     </p>
     <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">
-      You&rsquo;ve been added to PKLRALLY as a guest player. Tap below to
-      claim your profile so your league stats stay tied to <em>you</em>,
-      set your <strong>DUPR rating</strong>, and unlock everything PKLRALLY
-      does:
+      You&rsquo;ve been added to PKLRALLY as a guest player. Create your
+      free account so your matches, wins, and standings all stay tied to
+      <em>you</em> — and you can keep building your record across every
+      league you play.
     </p>
 
-    <ul style="font-size:15px;line-height:1.6;margin:0 0 20px;padding-left:20px;color:rgba(255,255,255,0.85);">
-      <li>See your placements + stats across every league you play in</li>
-      <li>Get notified when someone invites you to open play or a new league</li>
-      <li>Climb local ladders and win prizes from neighborhood sponsors</li>
-    </ul>
+    <div style="background:#0a1a00;border:2px solid #99FF00;border-radius:12px;padding:18px 22px;margin:20px 0;">
+      <p style="margin:0 0 10px;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;color:#99FF00;font-weight:700;">What you get</p>
+      <ul style="font-size:15px;line-height:1.7;margin:0;padding-left:20px;color:rgba(255,255,255,0.9);">
+        <li><strong>Track every match</strong> — wins, losses, total points, win rate, podium finishes — across every league you ever play in</li>
+        <li><strong>See your trajectory</strong> with per-round point graphs and league placements over time</li>
+        <li><strong>Set your DUPR rating</strong> so you get matched fairly in open play and ladder leagues</li>
+        <li><strong>Get notified</strong> when someone invites you to open play or a new league in your area</li>
+        <li><strong>Climb local ladders</strong> for prizes from neighborhood sponsors — paddles, gear, court time, gift cards</li>
+        <li>Connect with the pickleball community where you play</li>
+      </ul>
+    </div>
 
     <p style="margin:24px 0;text-align:center;">
-      <a href="${claimUrl}" style="display:inline-block;background:#99FF00;color:#000;text-decoration:none;padding:14px 28px;border-radius:12px;font-family:Manrope,system-ui,sans-serif;font-weight:800;font-size:16px;text-transform:uppercase;letter-spacing:0.04em;">Claim my profile →</a>
+      <a href="${claimUrl}" style="display:inline-block;background:#99FF00;color:#000;text-decoration:none;padding:14px 28px;border-radius:12px;font-family:Manrope,system-ui,sans-serif;font-weight:800;font-size:16px;text-transform:uppercase;letter-spacing:0.04em;">Create my account →</a>
     </p>
 
     <p style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.5;text-align:center;">
-      The link is good for 90 days. After signing in, you&rsquo;ll be guided
-      through a short onboarding to add your DUPR rating and a photo.
+      Free forever for players. The link is good for 90 days — after
+      signing in you&rsquo;ll be guided through a quick onboarding to set
+      your DUPR rating and add a photo.
     </p>
 
     <p style="font-size:12px;color:rgba(255,255,255,0.4);line-height:1.5;margin-top:32px;border-top:1px solid rgba(255,255,255,0.1);padding-top:16px;">
       PKLRALLY — find and play pickleball games near you. If this wasn&rsquo;t
-      you, just ignore the email; no account is created until you tap above.
+      you, just ignore this email; no account is created until you tap above.
     </p>
   </div>
 </div>`;
